@@ -15,13 +15,13 @@
       <input type="text" id="subject" name="subject" placeholder="예: 수학" />
 
       <label for="name">이름</label>
-      <input type="text" id="name" name="name" placeholder="챗봇 이름을 입력하세요" />
+      <input type="text" id="name" name="name" placeholder="이름을 입력하세요" />
 
       <label for="description">설명</label>
       <textarea id="description" name="description" placeholder="챗봇에 대한 간단한 설명을 입력하세요"></textarea>
 
       <div class="checkbox-group">
-        <label><input type="checkbox" id="ragToggle" /> RAG 사용</label>
+        <label><input type="checkbox" id="ragToggle" /> RAG</label>
         <div id="ragUpload" class="hidden">
           <label for="ragFile">PDF 파일 업로드</label>
           <input type="file" id="ragFile" accept=".pdf" />
@@ -29,7 +29,7 @@
       </div>
 
       <div class="checkbox-group">
-        <label><input type="checkbox" id="fewShotToggle" /> few-shot 예시 사용</label>
+        <label><input type="checkbox" id="fewShotToggle" /> Few-Shot</label>
         <div id="fewShotContainer" class="hidden">
           <div class="example-block">
             <label>예시 1</label>
@@ -40,7 +40,7 @@
       </div>
 
       <div class="checkbox-group">
-        <label><input type="checkbox" id="selfConsistencyToggle" /> self-consistency 적용</label>
+        <label><input type="checkbox" id="selfConsistencyToggle" /> Self-Consistency 적용</label>
       </div>
 
       <button type="submit">제출</button>

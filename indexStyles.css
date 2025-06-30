@@ -1,128 +1,52 @@
-/* 기본 설정 */
-* {
-    box-sizing: border-box;
-  }
-  
-  body {
-    font-family: 'Noto Serif KR', serif;
-    background-color: #f9f9f9;
-    color: #222;
-    margin: 0;
-    padding: 0;
-  }
-  
-  .container {
-    max-width: 700px;
-    margin: 60px auto;
-    padding: 40px;
-    background-color: #ffffff;
-    border: 1px solid #ddd;
-    border-radius: 12px;
-    box-shadow: 0 4px 12px rgba(0,0,0,0.05);
-  }
-  
-  h1 {
-    font-size: 1.8rem;
-    margin-bottom: 30px;
-    color: #003478;
-    border-left: 5px solid #003478;
-    padding-left: 15px;
-  }
-  
-  /* 폼 요소 스타일 */
-  form label {
-    display: block;
-    margin-top: 20px;
-    font-weight: bold;
-    font-size: 1rem;
-  }
-  
-  input[type="text"],
-  textarea,
-  input[type="file"] {
-    width: 100%;
-    padding: 12px;
-    margin-top: 8px;
-    border: 1px solid #ccc;
-    border-radius: 6px;
-    font-size: 1rem;
-  }
-  
-  textarea {
-    resize: vertical;
-    min-height: 80px;
-  }
-  
-  .checkbox-group {
-    margin-top: 20px;
-  }
-  
-  .checkbox-group label {
-    font-weight: normal;
-    display: flex;
-    align-items: center;
-    gap: 10px;
-  }
-  
-  /* 예시 블록 */
-  .example-block {
-    position: relative;
-    margin-top: 15px;
-    padding-top: 5px;
-  }
-  
-  .example-block label {
-    display: block;
-    margin-bottom: 6px;
-    font-weight: bold;
-    font-size: 0.95rem;
-  }
-  
-  .few-shot-input {
-    width: 100%;
-    padding: 10px;
-    border: 1px solid #bbb;
-    border-radius: 6px;
-    font-size: 0.95rem;
-  }
-  
-  /* 삭제 버튼 스타일 */
-  .delete-btn {
-    position: absolute;
-    top: 0;
-    right: 0;
-    background-color: transparent;
-    color: #aa0000;
-    border: none;
-    font-size: 1.1rem;
-    cursor: pointer;
-    padding: 2px 6px;
-    transition: color 0.2s ease-in-out;
-  }
-  
-  .delete-btn:hover {
-    color: #ff0000;
-  }
-  
-  /* 일반 버튼 스타일 */
-  button {
-    margin-top: 30px;
-    padding: 12px 20px;
-    background-color: #003478;
-    color: white;
-    border: none;
-    border-radius: 6px;
-    font-size: 1rem;
-    cursor: pointer;
-    transition: background-color 0.2s ease-in-out;
-  }
-  
-  button:hover {
-    background-color: #00295f;
-  }
-  
-  /* 숨김 처리용 클래스 */
-  .hidden {
-    display: none;
-  }
-  
+body {
+  margin: 0;
+  font-family: "Noto Sans KR", sans-serif;
+  background-color: #f7f9fc;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100vh;
+}
+
+.container {
+  text-align: center;
+  background-color: white;
+  padding: 40px;
+  border-radius: 16px;
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.1);
+  max-width: 400px;
+  width: 90%;
+}
+
+h1 {
+  margin-bottom: 10px;
+  font-size: 28px;
+  color: #003478; /* 서울대 진한 파랑색 */
+}
+
+.subtitle {
+  font-size: 14px;
+  color: #666;
+  margin-bottom: 30px;
+}
+
+.button-group {
+  display: flex;
+  justify-content: space-between;
+}
+
+button {
+  padding: 10px 20px;
+  font-size: 16px;
+  background-color: #003478;
+  color: white;
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: background-color 0.2s;
+  width: 48%;
+}
+
+button:hover {
+  background-color: #0050aa;
+}

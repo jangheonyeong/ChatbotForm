@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>챗봇 제작</title>
+  <link rel="stylesheet" href="CreateChatbotStyles.css" />
+</head>
+<body>
+  <div class="form-container">
+    <h2>챗봇 제작 요청</h2>
+
+    <form id="chatbotForm">
+      <label for="subject">교과</label>
+      <input type="text" id="subject" name="subject" required />
+
+      <label for="name">이름</label>
+      <input type="text" id="name" name="name" required />
+
+      <label for="description">설명</label>
+      <textarea id="description" name="description" required></textarea>
+
+      <label>
+        <input type="checkbox" id="ragToggle" />
+        RAG
+      </label>
+      <div id="ragUpload" class="hidden">
+        <label for="ragFile">PDF 업로드</label>
+        <input type="file" id="ragFile" accept=".pdf" />
+      </div>
+
+      <label>
+        <input type="checkbox" id="fewShotToggle" />
+        few-shot
+      </label>
+      <div id="fewShotContainer" class="hidden">
+        <div class="example-block">
+          <input type="text" class="example-input" placeholder="예시를 입력하세요" />
+        </div>
+        <button type="button" id="addExample">+ 예시 추가</button>
+      </div>
+
+      <label>
+        <input type="checkbox" id="selfConsistency" />
+        self-consistency
+      </label>
+
+      <button type="submit">제출하기</button>
+    </form>
+  </div>
+
+  <script type="module" src="src/CreateChatbotMain.js"></script>
+</body>
+</html>

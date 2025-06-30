@@ -1,0 +1,53 @@
+body {
+    margin: 0;
+    font-family: "Noto Sans KR", sans-serif;
+    background-color: #f0f4f8;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    height: 100vh;
+  }
+  
+  .dashboard-container {
+    background-color: white;
+    padding: 50px;
+    border-radius: 16px;
+    box-shadow: 0 10px 25px rgba(0, 0, 0, 0.1);
+    text-align: center;
+    max-width: 450px;
+    width: 90%;
+  }
+  
+  h1 {
+    color: #003478;
+    margin-bottom: 10px;
+  }
+  
+  .desc {
+    font-size: 14px;
+    color: #555;
+    margin-bottom: 30px;
+  }
+  
+  .button-group {
+    display: flex;
+    justify-content: space-between;
+    gap: 16px;
+  }
+  
+  button {
+    flex: 1;
+    padding: 14px;
+    font-size: 16px;
+    background-color: #003478;
+    color: white;
+    border: none;
+    border-radius: 10px;
+    cursor: pointer;
+    transition: background-color 0.2s;
+  }
+  
+  button:hover {
+    background-color: #0050aa;
+  }
+  

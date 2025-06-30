@@ -1,0 +1,69 @@
+body {
+  margin: 0;
+  font-family: "Noto Sans KR", sans-serif;
+  background-color: #f5f8fc;
+  padding: 40px;
+}
+
+.list-container {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 16px;
+}
+
+h2 {
+  text-align: center;
+  color: #003478;
+  margin-bottom: 32px;
+}
+
+.list-wrapper {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 20px;
+}
+
+/* 카드 스타일 */
+.chatbot-card {
+  background-color: white;
+  border-radius: 12px;
+  padding: 20px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  transition: transform 0.2s;
+}
+
+.chatbot-card:hover {
+  transform: translateY(-4px);
+}
+
+.chatbot-card h3 {
+  margin-top: 0;
+  margin-bottom: 10px;
+  color: #003478;
+  font-size: 18px;
+}
+
+.chatbot-card p {
+  margin: 6px 0;
+  font-size: 14px;
+  color: #333;
+}
+
+/* 삭제 버튼 */
+.delete-btn {
+  margin-top: 16px;
+  padding: 8px;
+  border: none;
+  border-radius: 6px;
+  background-color: #ff4d4d;
+  color: white;
+  cursor: pointer;
+  transition: background-color 0.2s;
+}
+
+.delete-btn:hover {
+  background-color: #d93636;
+}

@@ -1,9 +1,7 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
 import {
   getAuth,
-  createUserWithEmailAndPassword,
-  signInWithPopup,
-  GoogleAuthProvider
+  createUserWithEmailAndPassword
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
 import { firebaseConfig } from "../firebaseConfig.js";
 
@@ -20,23 +18,10 @@ document.getElementById("signupForm").addEventListener("submit", async (e) => {
 
   try {
     await createUserWithEmailAndPassword(auth, email, password);
-    alert("회원가입 성공! 로그인 상태로 이동합니다.");
-    window.location.href = "AfterLogIn.html";
+    alert("회원가입 성공! 로그인 페이지로 이동합니다.");
+    window.location.href = "LogIn.html";
   } catch (error) {
     console.error(error);
     alert("회원가입 실패: " + error.message);
-  }
-});
-
-// Google 로그인
-document.getElementById("googleSignUp").addEventListener("click", async () => {
-  const provider = new GoogleAuthProvider();
-  try {
-    await signInWithPopup(auth, provider);
-    alert("Google 로그인 성공!");
-    window.location.href = "AfterLogIn.html";
-  } catch (error) {
-    console.error(error);
-    alert("Google 로그인 실패: " + error.message);
   }
 });

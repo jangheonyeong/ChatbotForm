@@ -17,6 +17,30 @@ body {
   max-width: 500px;
 }
 
+.top-buttons {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 20px;
+}
+
+.nav-btn {
+  background-color: #003478;
+  border: none;
+  color: white;
+  font-size: 14px;
+  font-weight: bold;
+  padding: 10px 16px;
+  border-radius: 12px;
+  text-decoration: none;
+  cursor: pointer;
+  transition: background-color 0.2s;
+}
+
+.nav-btn:hover {
+  background-color: #0050aa;
+}
+
 h2 {
   text-align: center;
   color: #003478;
@@ -82,7 +106,8 @@ button#addExample {
   border: none;
   border-radius: 6px;
   padding: 6px 10px;
-  font-size: 13px;
+  font-size: 14px;
+  font-weight: bold;
   cursor: pointer;
   transition: background-color 0.2s;
 }

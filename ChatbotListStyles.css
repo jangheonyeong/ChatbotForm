@@ -11,6 +11,27 @@ body {
   padding: 16px;
 }
 
+.top-buttons {
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 16px;
+}
+
+.nav-btn {
+  padding: 10px 16px;
+  background-color: #003478;
+  color: white;
+  border: none;
+  border-radius: 8px;
+  font-size: 14px;
+  cursor: pointer;
+  text-decoration: none;
+}
+
+.nav-btn:hover {
+  background-color: #0050aa;
+}
+
 h2 {
   text-align: center;
   color: #003478;
@@ -23,7 +44,6 @@ h2 {
   gap: 20px;
 }
 
-/* 카드 스타일 */
 .chatbot-card {
   background-color: white;
   border-radius: 12px;
@@ -33,6 +53,7 @@ h2 {
   flex-direction: column;
   justify-content: space-between;
   transition: transform 0.2s;
+  position: relative;
 }
 
 .chatbot-card:hover {
@@ -52,18 +73,110 @@ h2 {
   color: #333;
 }
 
-/* 삭제 버튼 */
-.delete-btn {
-  margin-top: 16px;
-  padding: 8px;
-  border: none;
+textarea.editable {
+  width: 100%;
   border-radius: 6px;
-  background-color: #ff4d4d;
-  color: white;
-  cursor: pointer;
-  transition: background-color 0.2s;
+  padding: 6px;
+  font-size: 14px;
+  resize: vertical;
 }
 
-.delete-btn:hover {
-  background-color: #d93636;
+.card-buttons {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 16px;
+}
+
+.edit-btn,
+.save-btn,
+.delete-btn {
+  padding: 6px 10px;
+  font-size: 14px;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.edit-btn {
+  background-color: #0077cc;
+  color: white;
+}
+
+.save-btn {
+  background-color: #00aa77;
+  color: white;
+}
+
+.delete-btn {
+  background-color: #ff4d4d;
+  color: white;
+}
+
+button.hidden,
+input.hidden,
+.few-container.hidden,
+.rag-file.hidden {
+  display: none;
+}
+
+/* ✅ 체크박스 기본 모양 + 강조 효과만 */
+input[type="checkbox"] {
+  accent-color: #003478;
+  transform: scale(1.2);
+  margin-right: 6px;
+  cursor: pointer;
+  vertical-align: middle;
+}
+
+/* ✅ 체크박스 라벨 수평 정렬 */
+.checkbox-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 4px 0;
+}
+
+/* ✅ 링크 스타일 */
+a.rag-link {
+  color: #5a2ca0;
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+a.rag-link:hover {
+  color: #7a42c5;
+}
+
+/* ✅ 입력 input */
+.few-input {
+  margin-top: 6px;
+  padding: 4px 6px;
+  font-size: 14px;
+  width: 100%;
+  border-radius: 4px;
+  border: 1px solid #ccc;
+}
+
+/* ✅ 예시 추가 버튼 */
+.add-few {
+  margin-top: 8px;
+  padding: 4px 8px;
+  font-size: 13px;
+  background-color: #0077cc;
+  color: white;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+/* ✅ 파일 선택 input */
+input[type="file"] {
+  margin: 4px 0;
+  font-size: 13px;
+}
+
+/* ✅ 강조 텍스트 */
+strong {
+  font-weight: 600;
 }

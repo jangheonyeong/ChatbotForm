@@ -16,6 +16,18 @@ body {
   max-width: 400px;
   width: 90%;
   text-align: center;
+  position: relative;
+}
+
+.back-btn {
+  position: absolute;
+  top: 16px;
+  left: 16px;
+  background: none;
+  border: none;
+  font-size: 14px;
+  color: #003478;
+  cursor: pointer;
 }
 
 h2 {
@@ -61,34 +73,12 @@ button[type="submit"]:hover {
   font-size: 14px;
   color: #777;
   border-top: 1px solid #ddd;
-  position: relative;
+  padding-top: 10px;
 }
 
+/* 중복된 "또는" 제거: ::before 삭제 */
 .divider::before {
-  content: "또는";
-  position: absolute;
-  top: -12px;
-  left: 50%;
-  transform: translateX(-50%);
-  background-color: white;
-  padding: 0 10px;
-  color: #777;
-}
-
-.google-btn {
-  background-color: white;
-  color: #444;
-  border: 1px solid #ccc;
-  padding: 10px;
-  border-radius: 8px;
-  cursor: pointer;
-  width: 100%;
-  font-size: 15px;
-  transition: background-color 0.2s;
-}
-
-.google-btn:hover {
-  background-color: #f0f0f0;
+  display: none;
 }
 
 .info {

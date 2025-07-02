@@ -32,6 +32,27 @@ body {
   background-color: #0050aa;
 }
 
+.home-btn {
+  background-color: #003478;
+  border: none;
+  padding: 8px 10px;
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: background-color 0.2s;
+}
+
+.home-btn svg {
+  width: 24px;
+  height: 24px;
+}
+
+.home-btn:hover {
+  background-color: #0050aa;
+}
+
 h2 {
   text-align: center;
   color: #003478;
@@ -120,7 +141,6 @@ input.hidden,
   display: none;
 }
 
-/* ✅ 체크박스 기본 모양 + 강조 효과만 */
 input[type="checkbox"] {
   accent-color: #003478;
   transform: scale(1.2);
@@ -129,7 +149,6 @@ input[type="checkbox"] {
   vertical-align: middle;
 }
 
-/* ✅ 체크박스 라벨 수평 정렬 */
 .checkbox-row {
   display: flex;
   align-items: center;
@@ -137,7 +156,6 @@ input[type="checkbox"] {
   margin: 4px 0;
 }
 
-/* ✅ 링크 스타일 */
 a.rag-link {
   color: #5a2ca0;
   text-decoration: underline;
@@ -148,7 +166,6 @@ a.rag-link:hover {
   color: #7a42c5;
 }
 
-/* ✅ 입력 input */
 .few-input {
   margin-top: 6px;
   padding: 4px 6px;
@@ -158,7 +175,6 @@ a.rag-link:hover {
   border: 1px solid #ccc;
 }
 
-/* ✅ 예시 추가 버튼 */
 .add-few {
   margin-top: 8px;
   padding: 4px 8px;
@@ -170,13 +186,11 @@ a.rag-link:hover {
   cursor: pointer;
 }
 
-/* ✅ 파일 선택 input */
 input[type="file"] {
   margin: 4px 0;
   font-size: 13px;
 }
 
-/* ✅ 강조 텍스트 */
 strong {
   font-weight: 600;
 }

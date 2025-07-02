@@ -41,6 +41,27 @@ body {
   background-color: #0050aa;
 }
 
+.home-btn {
+  background-color: #003478;
+  border: none;
+  padding: 8px 10px;
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: background-color 0.2s;
+}
+
+.home-btn svg {
+  width: 24px;
+  height: 24px;
+}
+
+.home-btn:hover {
+  background-color: #0050aa;
+}
+
 h2 {
   text-align: center;
   color: #003478;

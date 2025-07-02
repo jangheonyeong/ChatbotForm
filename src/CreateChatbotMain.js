@@ -70,6 +70,7 @@ chatbotForm.addEventListener("submit", async (e) => {
   const description = document.getElementById("description").value.trim();
   const rag = ragToggle.checked;
   const selfConsistency = document.getElementById("selfConsistency").checked;
+  const useFewShot = fewShotToggle.checked;
   const examples = Array.from(document.querySelectorAll(".example-input"))
     .map(el => el.value.trim()).filter(val => val !== "");
 
@@ -102,7 +103,8 @@ chatbotForm.addEventListener("submit", async (e) => {
         ragFileUrl,
         ragFileName,
         selfConsistency,
-        fewShots: examples,
+        useFewShot,          // ✅ few-shot 여부 저장
+        examples,            // ✅ 예시 배열 저장
         createdAt: serverTimestamp(),
       });
 

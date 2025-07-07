@@ -10,8 +10,6 @@ export default defineConfig({
         main: resolve(__dirname, 'index.html'),
         CreateChatbot: resolve(__dirname, 'CreateChatbot.html'),
         ChatbotList: resolve(__dirname, 'ChatbotList.html'),
-        SignUp: resolve(__dirname, 'SignUp.html'),
-        LogIn: resolve(__dirname, 'LogIn.html'),
         AfterLogIn: resolve(__dirname, 'AfterLogIn.html'),
       },
     },

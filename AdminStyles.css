@@ -14,8 +14,8 @@ body {
   padding: 40px;
   border-radius: 16px;
   box-shadow: 0 8px 20px rgba(0, 0, 0, 0.1);
-  max-width: 400px;
-  width: 90%;
+  max-width: 700px;
+  width: 95%;
 }
 
 h1 {
@@ -30,24 +30,24 @@ h1 {
   margin-bottom: 30px;
 }
 
-.button-group {
-  display: flex;
-  justify-content: center;
+.chatbot-list {
+  text-align: left;
+  max-height: 450px;
+  overflow-y: auto;
+  padding: 0 10px;
 }
 
-button {
-  padding: 12px 24px;
-  font-size: 16px;
-  background-color: #003478;
-  color: white;
-  border: none;
+.chatbot-item {
+  background-color: #eef2f7;
   border-radius: 8px;
-  cursor: pointer;
-  transition: background-color 0.2s;
-  width: 80%;
-  max-width: 280px;
+  padding: 16px;
+  margin-bottom: 16px;
+  font-size: 14px;
+  line-height: 1.6;
 }
 
-button:hover {
-  background-color: #0050aa;
+.chatbot-item ul {
+  margin: 8px 0 0 16px;
+  padding: 0;
+  list-style-type: disc;
 }

@@ -2,20 +2,16 @@ body {
   margin: 0;
   font-family: "Noto Sans KR", sans-serif;
   background-color: #f7f9fc;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  height: 100vh;
+  padding: 20px;
 }
 
 .container {
   text-align: center;
   background-color: white;
-  padding: 40px;
+  padding: 20px;
   border-radius: 16px;
   box-shadow: 0 8px 20px rgba(0, 0, 0, 0.1);
-  max-width: 700px;
-  width: 95%;
+  max-width: 100%;
 }
 
 h1 {
@@ -27,27 +23,53 @@ h1 {
 .subtitle {
   font-size: 14px;
   color: #666;
-  margin-bottom: 30px;
+  margin-bottom: 20px;
 }
 
-.chatbot-list {
+.subject-grid {
+  display: grid;
+  grid-template-columns: repeat(8, 1fr);
+  gap: 20px;
+  overflow-x: auto;
   text-align: left;
-  max-height: 450px;
-  overflow-y: auto;
-  padding: 0 10px;
+}
+
+.subject-column {
+  background-color: #f0f4fa;
+  border-radius: 12px;
+  padding: 10px;
+  min-width: 220px;
+}
+
+.subject-column h2 {
+  font-size: 16px;
+  color: #003478;
+  border-bottom: 1px solid #ccc;
+  padding-bottom: 4px;
+  margin-bottom: 8px;
+}
+
+.chatbot-group {
+  margin-bottom: 16px;
+}
+
+.chatbot-group h3 {
+  font-size: 14px;
+  color: #444;
+  margin-bottom: 6px;
 }
 
 .chatbot-item {
   background-color: #eef2f7;
   border-radius: 8px;
-  padding: 16px;
-  margin-bottom: 16px;
-  font-size: 14px;
-  line-height: 1.6;
+  padding: 10px;
+  margin-bottom: 10px;
+  font-size: 13px;
+  line-height: 1.5;
 }
 
 .chatbot-item ul {
-  margin: 8px 0 0 16px;
+  margin: 6px 0 0 16px;
   padding: 0;
   list-style-type: disc;
 }

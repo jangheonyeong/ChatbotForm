@@ -11,6 +11,8 @@ export default defineConfig({
         CreateChatbot: resolve(__dirname, 'CreateChatbot.html'),
         ChatbotList: resolve(__dirname, 'ChatbotList.html'),
         AfterLogIn: resolve(__dirname, 'AfterLogIn.html'),
+        Admin: resolve(__dirname, 'Admin.html'),
+        Math: resolve(__dirname, 'Math.html'),
       },
     },
   },

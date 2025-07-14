@@ -7,12 +7,13 @@
   <link rel="stylesheet" href="AdminStyles.css" />
 </head>
 <body>
-  <div class="container">
-    <h1>관리자 대시보드</h1>
-    <p class="subtitle">교과별 → 이름별 챗봇 목록</p>
-
-    <div id="subjectGrid" class="subject-grid">
-      <p>로딩 중...</p>
+  <div class="mindmap-wrapper">
+    <h1>교과별 챗봇 요청 마인드맵</h1>
+    <div class="mindmap-container">
+      <!-- 🎯 viewBox를 명시적으로 Q지정해서 좌표계 맞춤 -->
+      <svg id="connector-lines" viewBox="0 0 800 800" width="800" height="800" preserveAspectRatio="none"></svg>
+      <div class="center-node">챗봇</div>
+      <div id="subject-nodes"></div>
     </div>
   </div>
 

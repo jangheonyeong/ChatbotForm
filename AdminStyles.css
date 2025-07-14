@@ -1,75 +1,73 @@
 body {
   margin: 0;
   font-family: "Noto Sans KR", sans-serif;
-  background-color: #f7f9fc;
+  background-color: #f4f6fa;
   padding: 20px;
-}
-
-.container {
   text-align: center;
-  background-color: white;
-  padding: 20px;
-  border-radius: 16px;
-  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.1);
-  max-width: 100%;
 }
 
 h1 {
-  margin-bottom: 10px;
-  font-size: 28px;
   color: #003478;
+  margin-bottom: 40px;
 }
 
-.subtitle {
-  font-size: 14px;
-  color: #666;
-  margin-bottom: 20px;
+.mindmap-wrapper {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
 }
 
-.subject-grid {
-  display: grid;
-  grid-template-columns: repeat(8, 1fr);
-  gap: 20px;
-  overflow-x: auto;
-  text-align: left;
+.mindmap-container {
+  position: relative;
+  width: 800px;
+  height: 800px;
 }
 
-.subject-column {
-  background-color: #f0f4fa;
-  border-radius: 12px;
-  padding: 10px;
-  min-width: 220px;
+#connector-lines {
+  position: absolute;
+  top: 0;
+  left: 0;
+  z-index: 0;
+  pointer-events: none;
 }
 
-.subject-column h2 {
+.center-node {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 120px;
+  height: 120px;
+  background-color: #003478;
+  color: white;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 2;
+  font-weight: bold;
+  box-shadow: 0 4px 10px rgba(0,0,0,0.2);
   font-size: 16px;
-  color: #003478;
-  border-bottom: 1px solid #ccc;
-  padding-bottom: 4px;
-  margin-bottom: 8px;
 }
 
-.chatbot-group {
-  margin-bottom: 16px;
-}
-
-.chatbot-group h3 {
+.subject-node {
+  position: absolute;
+  width: 90px;
+  height: 90px;
+  background-color: #003478;
+  color: white;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   font-size: 14px;
-  color: #444;
-  margin-bottom: 6px;
+  cursor: pointer;
+  z-index: 2;
+  box-shadow: 0 4px 8px rgba(0,0,0,0.2);
+  transition: transform 0.2s;
 }
 
-.chatbot-item {
-  background-color: #eef2f7;
-  border-radius: 8px;
-  padding: 10px;
-  margin-bottom: 10px;
-  font-size: 13px;
-  line-height: 1.5;
-}
-
-.chatbot-item ul {
-  margin: 6px 0 0 16px;
-  padding: 0;
-  list-style-type: disc;
+.subject-node:hover {
+  transform: scale(1.05);
 }

@@ -1,119 +1,67 @@
-import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
-import {
-  getFirestore,
-  collection,
-  getDocs
-} from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
-import { firebaseConfig } from "../firebaseConfig.js";
+const subjects = ["수학", "국어", "영어", "교육", "불어", "물리", "지리", "생물"];
 
-const app = initializeApp(firebaseConfig);
-const db = getFirestore(app);
-const subjectGrid = document.getElementById("subjectGrid");
+const subjectNodesContainer = document.getElementById("subject-nodes");
+const connectorLines = document.getElementById("connector-lines");
 
-const subjectOrder = ["수학", "국어", "영어", "교육", "불어", "물리", "지리", "생물"];
+const centerX = 400;
+const centerY = 400;
+const radius = 270;
 
-function formatDate(timestamp) {
-  if (!timestamp || !timestamp.toDate) return "-";
-  const date = timestamp.toDate();
-  return date.toLocaleString("ko-KR", {
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-    hour: "2-digit",
-    minute: "2-digit"
-  });
-}
+const nodeCenters = [];
 
-function toBool(value) {
-  if (typeof value === "boolean") return value;
-  if (typeof value === "string") return value.toLowerCase() === "true";
-  return Boolean(value);
-}
+subjects.forEach((subject, i) => {
+  const angle = (2 * Math.PI * i) / subjects.length;
+  const x = centerX + radius * Math.cos(angle);
+  const y = centerY + radius * Math.sin(angle);
 
-async function loadChatbots() {
-  try {
-    const snapshot = await getDocs(collection(db, "chatbots"));
-    if (snapshot.empty) {
-      subjectGrid.innerHTML = "<p>등록된 챗봇이 없습니다.</p>";
-      return;
+  const node = document.createElement("div");
+  node.className = "subject-node";
+  node.textContent = subject;
+  node.style.left = `${x - 45}px`;
+  node.style.top = `${y - 45}px`;
+
+  node.addEventListener("click", () => {
+    switch (subject) {
+      case "수학":
+        window.location.href = "Math.html";
+        break;
+      case "국어":
+        window.location.href = "Korean.html";
+        break;
+      case "영어":
+        window.location.href = "English.html";
+        break;
+      case "교육":
+        window.location.href = "Education.html";
+        break;
+      case "불어":
+        window.location.href = "French.html";
+        break;
+      case "물리":
+        window.location.href = "Physics.html";
+        break;
+      case "지리":
+        window.location.href = "Geography.html";
+        break;
+      case "생물":
+        window.location.href = "Biology.html";
+        break;
+      default:
+        window.location.href = `subject.html?subject=${encodeURIComponent(subject)}`;
     }
+  });
 
-    // 1단계: 교과 → 2단계: 이름
-    const grouped = {};
-    snapshot.forEach(doc => {
-      const data = doc.data();
-      const subject = data.subject || "기타";
-      const name = data.name || "미입력";
+  subjectNodesContainer.appendChild(node);
+  nodeCenters.push({ x, y });
+});
 
-      if (!grouped[subject]) {
-        grouped[subject] = {};
-      }
-      if (!grouped[subject][name]) {
-        grouped[subject][name] = [];
-      }
-      grouped[subject][name].push(data);
-    });
-
-    subjectGrid.innerHTML = "";
-
-    subjectOrder.forEach(subject => {
-      const column = document.createElement("div");
-      column.className = "subject-column";
-
-      const title = document.createElement("h2");
-      title.textContent = subject;
-      column.appendChild(title);
-
-      const subjectGroup = grouped[subject];
-      if (subjectGroup) {
-        for (const name in subjectGroup) {
-          const chatbotGroup = document.createElement("div");
-          chatbotGroup.className = "chatbot-group";
-
-          const groupTitle = document.createElement("h3");
-          groupTitle.textContent = `이름: ${name}`;
-          chatbotGroup.appendChild(groupTitle);
-
-          subjectGroup[name].forEach(data => {
-            const item = document.createElement("div");
-            item.className = "chatbot-item";
-
-            const useRAG = toBool(data.rag);
-            const useFewShot = toBool(data.useFewShot);
-            const useSelfConsistency = toBool(data.selfConsistency);
-
-            const ragFileLink = data.ragFileUrl
-              ? `<a href="${data.ragFileUrl}" target="_blank">${data.ragFileName || "RAG 파일 보기"}</a>`
-              : "없음";
-
-            const examples = Array.isArray(data.examples) && data.examples.length > 0
-              ? `<ul>${data.examples.map(ex => `<li>${ex}</li>`).join("")}</ul>`
-              : "없음";
-
-            item.innerHTML = `
-              <strong>설명:</strong> ${data.description || "없음"}<br/>
-              <strong>RAG:</strong> ${useRAG ? "✔ 사용" : "✘ 미사용"}<br/>
-              <strong>RAG 파일:</strong> ${ragFileLink}<br/>
-              <strong>few-shot:</strong> ${useFewShot ? "✔ 사용" : "✘ 미사용"}<br/>
-              <strong>few-shot 예시:</strong> ${examples}<br/>
-              <strong>self-consistency:</strong> ${useSelfConsistency ? "✔ 사용" : "✘ 미사용"}<br/>
-              <strong>작성일:</strong> ${formatDate(data.createdAt)}<br/>
-            `;
-            chatbotGroup.appendChild(item);
-          });
-
-          column.appendChild(chatbotGroup);
-        }
-      } else {
-        column.innerHTML += "<p>없음</p>";
-      }
-
-      subjectGrid.appendChild(column);
-    });
-  } catch (error) {
-    subjectGrid.innerHTML = "<p>챗봇 목록을 불러오는 데 실패했습니다.</p>";
-    console.error("Error fetching chatbots:", error);
-  }
-}
-
-loadChatbots();
+nodeCenters.forEach(({ x, y }) => {
+  const line = document.createElementNS("http://www.w3.org/2000/svg", "line");
+  line.setAttribute("x1", centerX);
+  line.setAttribute("y1", centerY);
+  line.setAttribute("x2", x);
+  line.setAttribute("y2", y);
+  line.setAttribute("stroke", "#aaa");
+  line.setAttribute("stroke-width", "2");
+  connectorLines.appendChild(line);
+});

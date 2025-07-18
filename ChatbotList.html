@@ -9,14 +9,14 @@
 <body>
   <div class="list-container">
     <div class="top-buttons">
-      <button onclick="location.href='AfterLogIn.html'" class="home-btn" title="홈으로">
-        <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather feather-home">
-          <path d="M3 9L12 2l9 7v11a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1z" />
-          <polyline points="9 22 9 12 15 12 15 22" />
-        </svg>
-      </button>
+      <!-- ✅ 집 모양 아이콘으로 교체 -->
+      <a href="AfterLogIn.html" class="home-btn" title="홈으로">
+        <img src="https://img.icons8.com/ios-filled/24/ffffff/home.png" alt="홈" class="home-icon" />
+      </a>
+
       <a href="CreateChatbot.html" class="nav-btn right">+ 챗봇 요청하기</a>
     </div>
+
     <h2>내가 요청한 챗봇 목록</h2>
     <div id="chatbotList" class="list-wrapper"></div>
   </div>

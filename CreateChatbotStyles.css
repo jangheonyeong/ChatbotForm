@@ -11,37 +11,47 @@ body {
 .top-buttons {
   display: flex;
   justify-content: space-between;
+  align-items: center;
   width: 100%;
   max-width: 1200px;
-  margin: 24px;
+  padding: 16px 32px;
+  box-sizing: border-box;
 }
 
-.nav-btn,
 .home-btn {
   background-color: #003478;
-  color: white;
-  font-size: 14px;
-  font-weight: bold;
-  padding: 10px 16px;
-  border: none;
-  border-radius: 12px;
-  text-decoration: none;
-  cursor: pointer;
-  transition: background-color 0.2s;
+  padding: 10px;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
-.nav-btn:hover,
-.home-btn:hover {
-  background-color: #0050aa;
+.home-icon {
+  width: 20px;
+  height: 20px;
+}
+
+.nav-btn {
+  background-color: #003478;
+  color: white;
+  padding: 10px 16px;
+  border: none;
+  border-radius: 8px;
+  text-decoration: none;
+  font-size: 14px;
+  cursor: pointer;
 }
 
 .main-container {
   display: flex;
-  flex-direction: row;
+  justify-content: center;
+  align-items: center;
   gap: 24px;
   width: 100%;
   max-width: 1200px;
-  margin-bottom: 40px;
+  margin-top: 30px;
+  margin-bottom: 60px;
 }
 
 .form-panel {
@@ -54,7 +64,7 @@ body {
 
 .preview-panel {
   flex: 1;
-  background-color: #f0f4ff;
+  background-color: #eef3ff;
   border-radius: 16px;
   padding: 24px;
   display: flex;
@@ -122,6 +132,13 @@ button#addExample {
   gap: 8px;
 }
 
+.example-input {
+  flex: 1;
+  height: 60px;
+  padding: 8px;
+  resize: vertical;
+}
+
 .delete-example {
   background-color: #ff4d4d;
   color: white;
@@ -150,6 +167,28 @@ button#addExample {
   overflow-y: auto;
   margin-bottom: 12px;
   border: 1px solid #ccc;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.chat-message {
+  max-width: 80%;
+  padding: 10px 14px;
+  border-radius: 16px;
+  font-size: 14px;
+  line-height: 1.4;
+  word-break: break-word;
+}
+
+.chat-message.user {
+  align-self: flex-end;
+  background-color: #cce5ff;
+}
+
+.chat-message.bot {
+  align-self: flex-start;
+  background-color: #f0f0f0;
 }
 
 .chat-input-box {

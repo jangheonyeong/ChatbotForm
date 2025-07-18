@@ -8,19 +8,16 @@
 </head>
 <body>
   <div class="top-buttons">
-    <button onclick="location.href='AfterLogIn.html'" class="home-btn" title="홈으로">
-      <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather feather-home">
-        <path d="M3 9L12 2l9 7v11a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1z" />
-        <polyline points="9 22 9 12 15 12 15 22" />
-      </svg>
-    </button>
+    <a href="AfterLogIn.html" class="home-btn" title="홈으로">
+      <img src="https://img.icons8.com/ios-filled/24/ffffff/home.png" alt="홈" class="home-icon" />
+    </a>
     <a href="ChatbotList.html" class="nav-btn">챗봇 목록 보기</a>
   </div>
 
   <div class="main-container">
     <!-- 왼쪽: 챗봇 입력 폼 -->
     <div class="form-panel">
-      <h2>챗봇 제작 요청</h2>
+      <h2>챗봇 제작</h2>
       <form id="chatbotForm">
         <label for="subject">교과</label>
         <input type="text" id="subject" name="subject" required />
@@ -31,29 +28,23 @@
         <label for="description">설명</label>
         <textarea id="description" name="description" required></textarea>
 
-        <label>
-          <input type="checkbox" id="ragToggle" /> RAG
-        </label>
+        <label><input type="checkbox" id="ragToggle" /> RAG</label>
         <div id="ragUpload" class="hidden">
           <label for="ragFile">PDF 업로드</label>
           <input type="file" id="ragFile" accept=".pdf" />
         </div>
 
-        <label>
-          <input type="checkbox" id="fewShotToggle" /> few-shot
-        </label>
+        <label><input type="checkbox" id="fewShotToggle" /> few-shot</label>
         <div id="fewShotContainer" class="hidden">
           <div class="example-block">
-            <input type="text" class="example-input" placeholder="예시를 입력하세요" />
+            <textarea class="example-input" placeholder="예시를 입력하세요."></textarea>
           </div>
           <button type="button" id="addExample">+ 예시 추가</button>
         </div>
 
-        <label>
-          <input type="checkbox" id="selfConsistency" /> self-consistency
-        </label>
+        <label><input type="checkbox" id="selfConsistency" /> self-consistency</label>
 
-        <button type="submit">제출하기</button>
+        <button type="submit">저장하기</button>
         <button type="button" id="testButton">테스트하기</button>
       </form>
     </div>
@@ -63,7 +54,7 @@
       <h3>실시간 챗봇 미리보기</h3>
       <div id="chatWindow" class="chat-window"></div>
       <div class="chat-input-box">
-        <input type="text" id="userMessage" placeholder="질문을 입력하세요..." />
+        <input type="text" id="userMessage" placeholder="질문을 입력하세요." />
         <button id="sendMessage">전송</button>
       </div>
     </div>

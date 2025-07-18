@@ -3,67 +3,66 @@ body {
   font-family: "Noto Sans KR", sans-serif;
   background-color: #f5f8fc;
   display: flex;
-  justify-content: center;
+  flex-direction: column;
   align-items: center;
   min-height: 100vh;
-}
-
-.form-container {
-  background-color: white;
-  padding: 40px;
-  border-radius: 16px;
-  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.1);
-  width: 90%;
-  max-width: 500px;
 }
 
 .top-buttons {
   display: flex;
   justify-content: space-between;
-  gap: 12px;
-  margin-bottom: 20px;
+  width: 100%;
+  max-width: 1200px;
+  margin: 24px;
 }
 
-.nav-btn {
+.nav-btn,
+.home-btn {
   background-color: #003478;
-  border: none;
   color: white;
   font-size: 14px;
   font-weight: bold;
   padding: 10px 16px;
+  border: none;
   border-radius: 12px;
   text-decoration: none;
   cursor: pointer;
   transition: background-color 0.2s;
 }
 
-.nav-btn:hover {
-  background-color: #0050aa;
-}
-
-.home-btn {
-  background-color: #003478;
-  border: none;
-  padding: 8px 10px;
-  border-radius: 12px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  cursor: pointer;
-  transition: background-color 0.2s;
-}
-
-.home-btn svg {
-  width: 24px;
-  height: 24px;
-}
-
+.nav-btn:hover,
 .home-btn:hover {
   background-color: #0050aa;
 }
 
-h2 {
-  text-align: center;
+.main-container {
+  display: flex;
+  flex-direction: row;
+  gap: 24px;
+  width: 100%;
+  max-width: 1200px;
+  margin-bottom: 40px;
+}
+
+.form-panel {
+  flex: 1;
+  background-color: white;
+  padding: 40px;
+  border-radius: 16px;
+  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.1);
+}
+
+.preview-panel {
+  flex: 1;
+  background-color: #f0f4ff;
+  border-radius: 16px;
+  padding: 24px;
+  display: flex;
+  flex-direction: column;
+  height: 700px;
+}
+
+h2, h3 {
   color: #003478;
   margin-bottom: 24px;
 }
@@ -90,7 +89,8 @@ textarea {
   height: 100px;
 }
 
-button[type="submit"] {
+button[type="submit"],
+#testButton {
   background-color: #003478;
   color: white;
   padding: 12px;
@@ -100,7 +100,8 @@ button[type="submit"] {
   cursor: pointer;
 }
 
-button[type="submit"]:hover {
+button[type="submit"]:hover,
+#testButton:hover {
   background-color: #0050aa;
 }
 
@@ -139,4 +140,35 @@ button#addExample {
 
 .hidden {
   display: none;
+}
+
+.chat-window {
+  flex: 1;
+  background: white;
+  border-radius: 12px;
+  padding: 16px;
+  overflow-y: auto;
+  margin-bottom: 12px;
+  border: 1px solid #ccc;
+}
+
+.chat-input-box {
+  display: flex;
+  gap: 8px;
+}
+
+.chat-input-box input {
+  flex: 1;
+  padding: 10px;
+  border-radius: 8px;
+  border: 1px solid #aaa;
+}
+
+.chat-input-box button {
+  padding: 10px 16px;
+  background-color: #003478;
+  color: white;
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
 }

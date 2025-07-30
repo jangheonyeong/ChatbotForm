@@ -26,11 +26,7 @@ body {
   align-items: center;
   justify-content: center;
 }
-
-.home-icon {
-  width: 20px;
-  height: 20px;
-}
+.home-icon { width: 20px; height: 20px; }
 
 .nav-btn {
   background-color: #003478;
@@ -46,27 +42,22 @@ body {
 .main-container {
   display: flex;
   justify-content: center;
-  align-items: center;
   gap: 24px;
   width: 100%;
   max-width: 1200px;
-  margin-top: 30px;
-  margin-bottom: 60px;
+  margin: 30px 0 60px;
 }
 
-.form-panel {
+.form-panel, .preview-panel {
   flex: 1;
-  background-color: white;
-  padding: 40px;
   border-radius: 16px;
-  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.1);
+  padding: 40px;
+  background: white;
+  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.08);
 }
 
 .preview-panel {
-  flex: 1;
   background-color: #eef3ff;
-  border-radius: 16px;
-  padding: 24px;
   display: flex;
   flex-direction: column;
   height: 700px;
@@ -83,9 +74,7 @@ form {
   gap: 16px;
 }
 
-input[type="text"],
-textarea,
-input[type="file"] {
+input[type="text"], textarea, input[type="file"] {
   padding: 10px;
   border: 1px solid #ccc;
   border-radius: 8px;
@@ -93,14 +82,12 @@ input[type="file"] {
   width: 100%;
   box-sizing: border-box;
 }
-
 textarea {
   resize: vertical;
   height: 100px;
 }
 
-button[type="submit"],
-#testButton {
+button[type="submit"], #testButton {
   background-color: #003478;
   color: white;
   padding: 12px;
@@ -109,55 +96,11 @@ button[type="submit"],
   font-size: 16px;
   cursor: pointer;
 }
-
-button[type="submit"]:hover,
-#testButton:hover {
+button[type="submit"]:hover, #testButton:hover {
   background-color: #0050aa;
 }
 
-button#addExample {
-  margin-top: 8px;
-  padding: 8px;
-  font-size: 14px;
-  background-color: #eee;
-  border-radius: 6px;
-  border: none;
-  cursor: pointer;
-}
-
-.example-block {
-  display: flex;
-  align-items: center;
-  margin-bottom: 8px;
-  gap: 8px;
-}
-
-.example-input {
-  flex: 1;
-  height: 60px;
-  padding: 8px;
-  resize: vertical;
-}
-
-.delete-example {
-  background-color: #ff4d4d;
-  color: white;
-  border: none;
-  border-radius: 6px;
-  padding: 6px 10px;
-  font-size: 14px;
-  font-weight: bold;
-  cursor: pointer;
-  transition: background-color 0.2s;
-}
-
-.delete-example:hover {
-  background-color: #d93636;
-}
-
-.hidden {
-  display: none;
-}
+.hidden { display: none; }
 
 .chat-window {
   flex: 1;
@@ -171,43 +114,43 @@ button#addExample {
   flex-direction: column;
   gap: 10px;
 }
-
 .chat-message {
   max-width: 80%;
   padding: 10px 14px;
   border-radius: 16px;
   font-size: 14px;
-  line-height: 1.4;
   word-break: break-word;
 }
+.chat-message.user { align-self: flex-end; background-color: #cce5ff; }
+.chat-message.bot { align-self: flex-start; background-color: #f0f0f0; }
 
-.chat-message.user {
-  align-self: flex-end;
-  background-color: #cce5ff;
-}
-
-.chat-message.bot {
-  align-self: flex-start;
-  background-color: #f0f0f0;
-}
-
-.chat-input-box {
+.input-panel {
   display: flex;
+  align-items: center;
+  border: 1px solid #ccc;
+  border-radius: 20px;
+  padding: 8px 12px;
+  background: white;
+  box-shadow: 0 2px 5px rgba(0,0,0,0.05);
   gap: 8px;
 }
-
-.chat-input-box input {
+.input-panel input[type="text"] {
+  border: none;
+  outline: none;
   flex: 1;
-  padding: 10px;
-  border-radius: 8px;
-  border: 1px solid #aaa;
+  font-size: 14px;
 }
-
-.chat-input-box button {
-  padding: 10px 16px;
+.input-panel button {
   background-color: #003478;
   color: white;
   border: none;
-  border-radius: 8px;
+  border-radius: 50%;
+  width: 32px;
+  height: 32px;
+  font-size: 16px;
+  cursor: pointer;
+}
+.upload-icon {
+  font-size: 18px;
   cursor: pointer;
 }

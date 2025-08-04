@@ -60,7 +60,7 @@ onAuthStateChanged(auth, async (user) => {
       </div>
     `;
 
-    // ✅ 수정 버튼
+    // ✅ 수정 버튼 클릭 시 localStorage 저장 후 페이지 이동
     const editBtn = card.querySelector(".edit-btn");
     editBtn.addEventListener("click", () => {
       const chatbotData = {
@@ -76,12 +76,10 @@ onAuthStateChanged(auth, async (user) => {
         examples: data.examples ?? [],
         selfConsistency: data.selfConsistency ?? false
       };
-
       localStorage.setItem("editChatbot", JSON.stringify(chatbotData));
       window.location.href = "CreateChatbot.html";
     });
 
-    // ✅ 삭제 버튼
     const deleteBtn = card.querySelector(".delete-btn");
     deleteBtn.addEventListener("click", async () => {
       const confirmDelete = confirm("정말 삭제하시겠습니까?");

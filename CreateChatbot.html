@@ -5,14 +5,8 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>챗봇 제작</title>
   <link rel="stylesheet" href="CreateChatbotStyles.css" />
-
-  <!-- ✅ MathJax (LaTeX 수식) -->
   <script src="https://polyfill.io/v3/polyfill.min.js?features=es6"></script>
-  <script id="MathJax-script" async
-          src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js">
-  </script>
-
-  <!-- ✅ Marked (Markdown 렌더링) -->
+  <script id="MathJax-script" async src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
 </head>
 <body>
@@ -28,6 +22,7 @@
 
         <h2>챗봇 제작</h2>
         <form id="chatbotForm">
+          <input type="hidden" id="chatbotId" />
           <label for="subject">교과</label>
           <input type="text" id="subject" name="subject" required />
           <label for="name">이름</label>
@@ -39,13 +34,12 @@
           <div id="ragUpload" class="hidden">
             <label for="ragFile">PDF 업로드</label>
             <input type="file" id="ragFile" accept=".pdf" />
+            <div id="ragFileLink"></div>
           </div>
 
           <label><input type="checkbox" id="fewShotToggle" /> few-shot</label>
           <div id="fewShotContainer" class="hidden">
-            <div class="example-block">
-              <textarea class="example-input" placeholder="예시를 입력하세요."></textarea>
-            </div>
+            <div id="examplesArea" class="example-block"></div>
             <button type="button" id="addExample">+ 예시 추가</button>
           </div>
 
@@ -75,7 +69,6 @@
     </div>
   </div>
 
-  <!-- ✅ 실시간 처리 로직 -->
   <script type="module" src="src/CreateChatbotMain.js"></script>
 </body>
 </html>

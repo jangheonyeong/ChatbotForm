@@ -1,9 +1,13 @@
-// vite.config.js
-import { resolve } from 'path'
-import { defineConfig } from 'vite'
-
+import { resolve } from 'path';
+import { defineConfig } from 'vite';
 
 export default defineConfig({
+  resolve: {
+    alias: {
+      // ⚠️ 불필요한 alias 제거: pdf.worker.entry는 더 이상 사용되지 않음
+      // 필요할 경우 다른 경로만 여기에 추가
+    }
+  },
   build: {
     rollupOptions: {
       input: {
@@ -23,4 +27,4 @@ export default defineConfig({
       },
     },
   },
-})
+});

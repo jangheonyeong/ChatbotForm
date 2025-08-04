@@ -1,13 +1,7 @@
+// ✅ import 및 초기화
 import { initializeApp } from "firebase/app";
-import {
-  getAuth
-} from "firebase/auth";
-import {
-  getStorage,
-  ref,
-  uploadBytes,
-  getDownloadURL
-} from "firebase/storage";
+import { getAuth } from "firebase/auth";
+import { getStorage, ref, uploadBytes } from "firebase/storage";
 import { firebaseConfig } from "../firebaseConfig.js";
 import { createClient } from "@supabase/supabase-js";
 import * as pdfjsLib from "pdfjs-dist/legacy/build/pdf";
@@ -19,13 +13,12 @@ const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
 const storage = getStorage(app);
 
-// ✅ Supabase 연결
 const supabase = createClient(
   import.meta.env.VITE_SUPABASE_URL,
   import.meta.env.VITE_SUPABASE_ANON_KEY
 );
 
-// ✅ PDF에서 텍스트 추출
+// ✅ PDF 텍스트 추출
 async function extractTextFromPDFBlob(file) {
   const arrayBuffer = await file.arrayBuffer();
   const pdf = await pdfjsLib.getDocument({ data: new Uint8Array(arrayBuffer) }).promise;
@@ -40,7 +33,6 @@ async function extractTextFromPDFBlob(file) {
   return text;
 }
 
-// ✅ 텍스트를 chunk로 분할
 function chunkText(text, maxTokens = 500) {
   const words = text.split(/\s+/);
   const chunks = [];
@@ -50,7 +42,6 @@ function chunkText(text, maxTokens = 500) {
   return chunks;
 }
 
-// ✅ OpenAI 임베딩 생성
 async function getEmbedding(text) {
   const res = await fetch("https://api.openai.com/v1/embeddings", {
     method: "POST",
@@ -63,12 +54,10 @@ async function getEmbedding(text) {
       input: text
     })
   });
-
   const data = await res.json();
   return data.data[0].embedding;
 }
 
-// ✅ ChatGPT 호출
 async function sendToOpenAI(messages) {
   const res = await fetch("https://api.openai.com/v1/chat/completions", {
     method: "POST",
@@ -81,16 +70,15 @@ async function sendToOpenAI(messages) {
       messages
     })
   });
-
   if (!res.ok) {
     const errorText = await res.text();
     throw new Error(`OpenAI 응답 실패: ${res.status} ${errorText}`);
   }
-
   const data = await res.json();
   return data.choices?.[0]?.message?.content ?? "응답 오류";
 }
 
+// ✅ 초기화 및 이벤트 바인딩
 window.addEventListener("DOMContentLoaded", () => {
   const input = document.getElementById("userMessage");
   const chatWindow = document.getElementById("chatWindow");
@@ -109,8 +97,35 @@ window.addEventListener("DOMContentLoaded", () => {
   document.getElementById("ragToggle").addEventListener("change", () => {
     document.getElementById("ragUpload").classList.toggle("hidden", !ragToggle.checked);
   });
+
+  // few-shot 관련 UI 처리
+  const fewShotToggle = document.getElementById("fewShotToggle");
+  const fewShotContainer = document.getElementById("fewShotContainer");
+  fewShotToggle.addEventListener("change", () => {
+    fewShotContainer.classList.toggle("hidden", !fewShotToggle.checked);
+  });
+
+  document.getElementById("addExample").addEventListener("click", () => {
+    const block = document.createElement("div");
+    block.className = "example-block";
+
+    const textarea = document.createElement("textarea");
+    textarea.className = "example-input";
+    textarea.placeholder = "예시를 입력하세요.";
+
+    const delBtn = document.createElement("button");
+    delBtn.textContent = "✕";
+    delBtn.type = "button";
+    delBtn.className = "delete-example";
+    delBtn.addEventListener("click", () => block.remove());
+
+    block.appendChild(textarea);
+    block.appendChild(delBtn);
+    document.getElementById("examplesArea").appendChild(block);
+  });
 });
 
+// ✅ 메시지 처리
 async function onSendMessage(input, chatWindow) {
   const msg = input.value.trim();
   if (!msg) return;
@@ -122,6 +137,22 @@ async function onSendMessage(input, chatWindow) {
   const systemPrompt = document.getElementById("description").value.trim();
   if (systemPrompt) {
     messages.push({ role: "system", content: systemPrompt });
+  }
+
+  // ✅ few-shot 예시 추가
+  const useFewShot = document.getElementById("fewShotToggle").checked;
+  if (useFewShot) {
+    const examples = document.querySelectorAll(".example-input");
+    examples.forEach((textarea) => {
+      const exampleText = textarea.value.trim();
+      if (exampleText.includes("→")) {
+        const [userPart, botPart] = exampleText.split("→").map(s => s.trim());
+        if (userPart && botPart) {
+          messages.push({ role: "user", content: userPart });
+          messages.push({ role: "assistant", content: botPart });
+        }
+      }
+    });
   }
 
   const useRag = document.getElementById("ragToggle").checked;
@@ -161,7 +192,7 @@ async function onSendMessage(input, chatWindow) {
     }
   }
 
-  // ✅ 질문 임베딩 후 Supabase에서 유사 chunk 검색
+  // ✅ RAG 벡터 검색
   let ragContext = "";
   if (useRag) {
     try {
@@ -199,7 +230,7 @@ async function onSendMessage(input, chatWindow) {
   }
 }
 
-// ✅ UI 출력 함수
+// ✅ 출력 유틸
 function appendMessage(role, content = "") {
   const msg = document.createElement("div");
   msg.className = `chat-message ${role}`;

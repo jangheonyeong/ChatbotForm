@@ -1,67 +1,33 @@
-/* 전체 페이지 설정 */
 body {
   margin: 0;
   font-family: "Noto Sans KR", sans-serif;
   background-color: #f5f8fc;
-}
-
-/* 화면 중앙 정렬용 wrapper */
-.page-wrapper {
   display: flex;
   flex-direction: column;
   align-items: center;
-  justify-content: center;
   min-height: 100vh;
 }
 
-/* 제작 폼과 미리보기 나란히 정렬 */
-.main-container {
+.top-buttons {
   display: flex;
-  justify-content: center;
-  gap: 24px;
+  justify-content: space-between;
+  align-items: center;
   width: 100%;
   max-width: 1200px;
-  margin: 0;
+  padding: 16px 32px;
+  box-sizing: border-box;
 }
 
-/* 박스 공통 스타일 */
-.form-panel,
-.preview-panel {
-  flex: 1;
-  border-radius: 16px;
-  padding: 40px 40px 40px 40px;
-  background: white;
-  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.08);
-  position: relative;
-}
-
-/* 홈/목록 버튼을 박스 내부 상단 모서리에 고정 */
-.panel-header {
-  position: absolute;
-  top: 16px;
-}
-.panel-header.left {
-  left: 16px;
-}
-.panel-header.right {
-  right: 16px;
-}
-
-/* 홈 버튼 스타일 */
 .home-btn {
   background-color: #003478;
   padding: 10px;
   border-radius: 8px;
-  display: inline-flex;
+  display: flex;
   align-items: center;
   justify-content: center;
 }
-.home-icon {
-  width: 20px;
-  height: 20px;
-}
+.home-icon { width: 20px; height: 20px; }
 
-/* 챗봇 목록 보기 버튼 스타일 */
 .nav-btn {
   background-color: #003478;
   color: white;
@@ -73,7 +39,23 @@ body {
   cursor: pointer;
 }
 
-/* 미리보기 영역 배경색만 다름 */
+.main-container {
+  display: flex;
+  justify-content: center;
+  gap: 24px;
+  width: 100%;
+  max-width: 1200px;
+  margin: 30px 0 60px;
+}
+
+.form-panel, .preview-panel {
+  flex: 1;
+  border-radius: 16px;
+  padding: 40px;
+  background: white;
+  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.08);
+}
+
 .preview-panel {
   background-color: #eef3ff;
   display: flex;
@@ -81,24 +63,18 @@ body {
   height: 700px;
 }
 
-/* 제목 */
 h2, h3 {
   color: #003478;
   margin-bottom: 24px;
-  margin-top: 40px; /* 버튼 아래 공간 확보 */
 }
 
-/* 챗봇 폼 구성 */
 form {
   display: flex;
   flex-direction: column;
   gap: 16px;
 }
 
-/* 입력 필드 및 textarea */
-input[type="text"],
-textarea,
-input[type="file"] {
+input[type="text"], textarea, input[type="file"] {
   padding: 10px;
   border: 1px solid #ccc;
   border-radius: 8px;
@@ -106,15 +82,12 @@ input[type="file"] {
   width: 100%;
   box-sizing: border-box;
 }
-
 textarea {
   resize: vertical;
   height: 100px;
 }
 
-/* 저장/테스트 버튼 */
-button[type="submit"],
-#testButton {
+button[type="submit"], #testButton {
   background-color: #003478;
   color: white;
   padding: 12px;
@@ -123,17 +96,12 @@ button[type="submit"],
   font-size: 16px;
   cursor: pointer;
 }
-button[type="submit"]:hover,
-#testButton:hover {
+button[type="submit"]:hover, #testButton:hover {
   background-color: #0050aa;
 }
 
-/* 숨김 처리용 */
-.hidden {
-  display: none;
-}
+.hidden { display: none; }
 
-/* 채팅 창 영역 */
 .chat-window {
   flex: 1;
   background: white;
@@ -146,8 +114,6 @@ button[type="submit"]:hover,
   flex-direction: column;
   gap: 10px;
 }
-
-/* 채팅 메시지 스타일 */
 .chat-message {
   max-width: 80%;
   padding: 10px 14px;
@@ -155,16 +121,9 @@ button[type="submit"]:hover,
   font-size: 14px;
   word-break: break-word;
 }
-.chat-message.user {
-  align-self: flex-end;
-  background-color: #cce5ff;
-}
-.chat-message.bot {
-  align-self: flex-start;
-  background-color: #f0f0f0;
-}
+.chat-message.user { align-self: flex-end; background-color: #cce5ff; }
+.chat-message.bot { align-self: flex-start; background-color: #f0f0f0; }
 
-/* 채팅 입력창 스타일 */
 .input-panel {
   display: flex;
   align-items: center;
@@ -175,14 +134,12 @@ button[type="submit"]:hover,
   box-shadow: 0 2px 5px rgba(0,0,0,0.05);
   gap: 8px;
 }
-
 .input-panel input[type="text"] {
   border: none;
   outline: none;
   flex: 1;
   font-size: 14px;
 }
-
 .input-panel button {
   background-color: #003478;
   color: white;
@@ -193,8 +150,6 @@ button[type="submit"]:hover,
   font-size: 16px;
   cursor: pointer;
 }
-
-/* 클립 아이콘 */
 .upload-icon {
   font-size: 18px;
   cursor: pointer;

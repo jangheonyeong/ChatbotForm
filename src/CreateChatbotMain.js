@@ -25,7 +25,7 @@ const db = getFirestore(app);
 const auth = getAuth(app);
 const storage = getStorage(app);
 
-// ✅ PDF 내용을 텍스트로 추출
+// ✅ PDF 텍스트 추출 함수
 async function extractTextFromPDF(file) {
   const reader = new FileReader();
   return new Promise((resolve, reject) => {
@@ -45,6 +45,7 @@ async function extractTextFromPDF(file) {
   });
 }
 
+// ✅ 초기 실행
 window.addEventListener("DOMContentLoaded", () => {
   const input = document.getElementById("userMessage");
   const chatWindow = document.getElementById("chatWindow");
@@ -60,6 +61,7 @@ window.addEventListener("DOMContentLoaded", () => {
     }
   });
 
+  // ✅ 수정 모드인 경우 채우기
   const saved = localStorage.getItem("editChatbot");
   if (saved) {
     const data = JSON.parse(saved);
@@ -106,6 +108,7 @@ window.addEventListener("DOMContentLoaded", () => {
     localStorage.removeItem("editChatbot");
   }
 
+  // ✅ 옵션 토글
   document.getElementById("ragToggle").addEventListener("change", () => {
     document.getElementById("ragUpload").classList.toggle("hidden", !ragToggle.checked);
   });
@@ -113,6 +116,7 @@ window.addEventListener("DOMContentLoaded", () => {
     document.getElementById("fewShotContainer").classList.toggle("hidden", !fewShotToggle.checked);
   });
 
+  // ✅ 예시 추가
   document.getElementById("addExample").addEventListener("click", () => {
     const block = document.createElement("div");
     block.className = "example-block";
@@ -132,6 +136,7 @@ window.addEventListener("DOMContentLoaded", () => {
     document.getElementById("examplesArea").appendChild(block);
   });
 
+  // ✅ 저장하기
   document.getElementById("chatbotForm").addEventListener("submit", async (e) => {
     e.preventDefault();
 
@@ -197,7 +202,7 @@ window.addEventListener("DOMContentLoaded", () => {
   });
 });
 
-// ✅ 실시간 챗봇 메시지 전송
+// ✅ 실시간 챗봇 응답
 async function onSendMessage(input, chatWindow, imageInput) {
   const msg = input.value.trim();
   const imageFile = imageInput.files[0];
@@ -255,10 +260,11 @@ async function onSendMessage(input, chatWindow, imageInput) {
     botMessageEl.innerHTML = "";
     animateTypingWithMath(botMessageEl, html);
   } catch (err) {
-    botMessageEl.textContent = "❌ 오류 발생: " + err.message;
+    appendMessage("bot", "❌ 오류 발생: " + err.message);
   }
 }
 
+// ✅ OpenAI 전송 함수
 async function sendToOpenAI(messages) {
   const res = await fetch("https://api.openai.com/v1/chat/completions", {
     method: "POST",
@@ -275,6 +281,7 @@ async function sendToOpenAI(messages) {
   return data.choices?.[0]?.message?.content ?? "❗ 응답 오류";
 }
 
+// ✅ 메시지 추가 함수
 function appendMessage(role, content = "") {
   const msg = document.createElement("div");
   msg.className = `chat-message ${role}`;
@@ -285,6 +292,7 @@ function appendMessage(role, content = "") {
   return msg;
 }
 
+// ✅ 애니메이션 타이핑 + 수식 렌더링
 function animateTypingWithMath(element, html, delay = 10) {
   let i = 0;
   let temp = "";

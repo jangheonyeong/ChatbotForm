@@ -2,17 +2,17 @@ const input = document.getElementById("userMessage");
 const chatWindow = document.getElementById("chatWindow");
 const imageInput = document.getElementById("imageInput");
 
-// ✅ RAG toggle
+// RAG toggle
 document.getElementById("ragToggle").addEventListener("change", () => {
   document.getElementById("ragUpload").classList.toggle("hidden", !ragToggle.checked);
 });
 
-// ✅ few-shot toggle
+// few-shot toggle
 document.getElementById("fewShotToggle").addEventListener("change", () => {
   document.getElementById("fewShotContainer").classList.toggle("hidden", !fewShotToggle.checked);
 });
 
-// ✅ 예시 추가 버튼
+// 예시 추가
 document.getElementById("addExample").addEventListener("click", () => {
   const block = document.createElement("div");
   block.className = "example-block";
@@ -32,7 +32,7 @@ document.getElementById("addExample").addEventListener("click", () => {
   document.getElementById("fewShotContainer").appendChild(block);
 });
 
-// ✅ 전송 버튼 클릭 시 처리
+// 전송 버튼 클릭
 document.getElementById("sendMessage").addEventListener("click", async () => {
   const msg = input.value.trim();
   const imageFile = imageInput.files[0];
@@ -44,18 +44,15 @@ document.getElementById("sendMessage").addEventListener("click", async () => {
 
   const messages = [];
 
-  // ✅ system prompt
   const systemPrompt = document.getElementById("description").value.trim();
   if (systemPrompt) {
     messages.push({ role: "system", content: systemPrompt });
   }
 
-  // ✅ few-shot
   const useFewShot = document.getElementById("fewShotToggle").checked;
   const fewShotExamples = Array.from(document.querySelectorAll(".example-input"))
     .map(el => el.value.trim())
     .filter(Boolean);
-
   if (useFewShot && fewShotExamples.length > 0) {
     fewShotExamples.forEach(example => {
       messages.push({ role: "user", content: example });
@@ -63,7 +60,6 @@ document.getElementById("sendMessage").addEventListener("click", async () => {
     });
   }
 
-  // ✅ RAG
   const useRag = document.getElementById("ragToggle").checked;
   const ragFile = document.getElementById("ragFile").files[0];
   if (useRag && ragFile) {
@@ -73,7 +69,6 @@ document.getElementById("sendMessage").addEventListener("click", async () => {
     });
   }
 
-  // ✅ user message (텍스트 + 이미지 멀티모달 처리)
   if (imageFile) {
     const base64 = await toBase64(imageFile);
     messages.push({
@@ -86,6 +81,9 @@ document.getElementById("sendMessage").addEventListener("click", async () => {
   } else {
     messages.push({ role: "user", content: msg });
   }
+
+  // "생각 중..." 출력
+  const botMessageEl = appendMessage("bot", "생각 중...");
 
   try {
     const res = await fetch("https://api.openai.com/v1/chat/completions", {
@@ -102,22 +100,45 @@ document.getElementById("sendMessage").addEventListener("click", async () => {
 
     const data = await res.json();
     const reply = data.choices?.[0]?.message?.content ?? "❗ 응답 오류";
-    appendMessage("bot", reply);
+
+    // Markdown → HTML 파싱
+    const html = marked.parse(reply);
+
+    // 기존 "생각 중..." 제거
+    botMessageEl.innerHTML = "";
+
+    // 한 글자씩 HTML 출력
+    animateTypingWithMath(botMessageEl, html);
   } catch (err) {
-    appendMessage("bot", "❌ 오류 발생: " + err.message);
+    botMessageEl.textContent = "❌ 오류 발생: " + err.message;
   }
 });
 
-// ✅ 메시지 출력
-function appendMessage(role, content) {
+// 메시지 추가 함수
+function appendMessage(role, content = "") {
   const msg = document.createElement("div");
   msg.className = `chat-message ${role}`;
-  msg.textContent = content;
+  msg.innerHTML = content;
   chatWindow.appendChild(msg);
   chatWindow.scrollTop = chatWindow.scrollHeight;
+  return msg;
 }
 
-// ✅ 이미지 -> base64 변환
+// HTML + 수식 + 한 글자씩 출력
+function animateTypingWithMath(element, html, delay = 10) {
+  let i = 0;
+  let temp = "";
+  const interval = setInterval(() => {
+    temp += html[i];
+    element.innerHTML = temp;
+    MathJax.typesetPromise([element]); // 수식 렌더링
+    i++;
+    if (i >= html.length) clearInterval(interval);
+    chatWindow.scrollTop = chatWindow.scrollHeight;
+  }, delay);
+}
+
+// 이미지 → base64
 function toBase64(file) {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
@@ -127,7 +148,7 @@ function toBase64(file) {
   });
 }
 
-// ✅ Enter 키로 전송
+// 엔터키 전송
 input.addEventListener("keydown", (e) => {
   if (e.key === "Enter" && !e.shiftKey) {
     e.preventDefault();

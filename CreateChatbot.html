@@ -5,63 +5,77 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>챗봇 제작</title>
   <link rel="stylesheet" href="CreateChatbotStyles.css" />
+
+  <!-- ✅ MathJax (LaTeX 수식) -->
+  <script src="https://polyfill.io/v3/polyfill.min.js?features=es6"></script>
+  <script id="MathJax-script" async
+          src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js">
+  </script>
+
+  <!-- ✅ Marked (Markdown 렌더링) -->
+  <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
 </head>
 <body>
-  <div class="top-buttons">
-    <a href="AfterLogIn.html" class="home-btn" title="홈으로">
-      <img src="https://img.icons8.com/ios-filled/24/ffffff/home.png" alt="홈" class="home-icon" />
-    </a>
-    <a href="ChatbotList.html" class="nav-btn">챗봇 목록 보기</a>
-  </div>
-
-  <div class="main-container">
-    <!-- 챗봇 제작 폼 -->
-    <div class="form-panel">
-      <h2>챗봇 제작</h2>
-      <form id="chatbotForm">
-        <label for="subject">교과</label>
-        <input type="text" id="subject" name="subject" required />
-        <label for="name">이름</label>
-        <input type="text" id="name" name="name" required />
-        <label for="description">설명</label>
-        <textarea id="description" name="description" required></textarea>
-
-        <label><input type="checkbox" id="ragToggle" /> RAG</label>
-        <div id="ragUpload" class="hidden">
-          <label for="ragFile">PDF 업로드</label>
-          <input type="file" id="ragFile" accept=".pdf" />
+  <div class="page-wrapper">
+    <div class="main-container">
+      <!-- 챗봇 제작 폼 -->
+      <div class="form-panel">
+        <div class="panel-header left">
+          <a href="AfterLogIn.html" class="home-btn" title="홈으로">
+            <img src="https://img.icons8.com/ios-filled/24/ffffff/home.png" alt="홈" class="home-icon" />
+          </a>
         </div>
 
-        <label><input type="checkbox" id="fewShotToggle" /> few-shot</label>
-        <div id="fewShotContainer" class="hidden">
-          <div class="example-block">
-            <textarea class="example-input" placeholder="예시를 입력하세요."></textarea>
+        <h2>챗봇 제작</h2>
+        <form id="chatbotForm">
+          <label for="subject">교과</label>
+          <input type="text" id="subject" name="subject" required />
+          <label for="name">이름</label>
+          <input type="text" id="name" name="name" required />
+          <label for="description">설명</label>
+          <textarea id="description" name="description" required></textarea>
+
+          <label><input type="checkbox" id="ragToggle" /> RAG</label>
+          <div id="ragUpload" class="hidden">
+            <label for="ragFile">PDF 업로드</label>
+            <input type="file" id="ragFile" accept=".pdf" />
           </div>
-          <button type="button" id="addExample">+ 예시 추가</button>
+
+          <label><input type="checkbox" id="fewShotToggle" /> few-shot</label>
+          <div id="fewShotContainer" class="hidden">
+            <div class="example-block">
+              <textarea class="example-input" placeholder="예시를 입력하세요."></textarea>
+            </div>
+            <button type="button" id="addExample">+ 예시 추가</button>
+          </div>
+
+          <label><input type="checkbox" id="selfConsistency" /> self-consistency</label>
+
+          <button type="submit">저장하기</button>
+          <button type="button" id="testButton">테스트하기</button>
+        </form>
+      </div>
+
+      <!-- 실시간 미리보기 -->
+      <div class="preview-panel">
+        <div class="panel-header right">
+          <a href="ChatbotList.html" class="nav-btn">챗봇 목록 보기</a>
         </div>
 
-        <label><input type="checkbox" id="selfConsistency" /> self-consistency</label>
-
-        <button type="submit">저장하기</button>
-        <button type="button" id="testButton">테스트하기</button>
-      </form>
-    </div>
-
-    <!-- 미리보기 -->
-    <div class="preview-panel">
-      <h3>실시간 챗봇 미리보기</h3>
-      <div id="chatWindow" class="chat-window"></div>
-      <div class="input-panel">
-        <label class="upload-icon">
-          📎
-          <input type="file" id="imageInput" accept="image/*" hidden />
-        </label>
-        <input type="text" id="userMessage" placeholder="메시지를 입력하세요..." />
-        <button id="sendMessage">➤</button>
+        <h3>실시간 챗봇 미리보기</h3>
+        <div id="chatWindow" class="chat-window"></div>
+        <div class="input-panel">
+          <label class="upload-icon">📎
+            <input type="file" id="imageInput" accept="image/*" hidden />
+          </label>
+          <input type="text" id="userMessage" placeholder="메시지를 입력하세요..." />
+          <button id="sendMessage">➤</button>
+        </div>
       </div>
     </div>
   </div>
 
+  <!-- ✅ 실시간 처리 로직 -->
   <script type="module" src="src/CreateChatbotMain.js"></script>
 </body>
 </html>

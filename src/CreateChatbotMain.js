@@ -1,3 +1,5 @@
+// [CreateChatbotMain.js]
+
 import { initializeApp } from "firebase/app";
 import {
   getAuth
@@ -26,13 +28,11 @@ const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
 const db = getFirestore(app);
 const storage = getStorage(app);
-
 const supabase = createClient(
   import.meta.env.VITE_SUPABASE_URL,
   import.meta.env.VITE_SUPABASE_ANON_KEY
 );
 
-// ✅ PDF 텍스트 추출
 async function extractTextFromPDFBlob(file) {
   const arrayBuffer = await file.arrayBuffer();
   const pdf = await pdfjsLib.getDocument({ data: new Uint8Array(arrayBuffer) }).promise;
@@ -92,7 +92,6 @@ async function sendToOpenAI(messages) {
   return data.choices?.[0]?.message?.content ?? "응답 오류";
 }
 
-// ✅ 초기화 및 이벤트 바인딩
 window.addEventListener("DOMContentLoaded", () => {
   const input = document.getElementById("userMessage");
   const chatWindow = document.getElementById("chatWindow");
@@ -113,9 +112,8 @@ window.addEventListener("DOMContentLoaded", () => {
   });
 
   const fewShotToggle = document.getElementById("fewShotToggle");
-  const fewShotContainer = document.getElementById("fewShotContainer");
   fewShotToggle.addEventListener("change", () => {
-    fewShotContainer.classList.toggle("hidden", !fewShotToggle.checked);
+    document.getElementById("fewShotContainer").classList.toggle("hidden", !fewShotToggle.checked);
   });
 
   document.getElementById("addExample").addEventListener("click", () => {
@@ -137,11 +135,9 @@ window.addEventListener("DOMContentLoaded", () => {
     document.getElementById("examplesArea").appendChild(block);
   });
 
-  // ✅ 저장 기능 추가
   const form = document.getElementById("chatbotForm");
   form.addEventListener("submit", async (e) => {
     e.preventDefault();
-
     const chatbotId = document.getElementById("chatbotId").value;
     const subject = document.getElementById("subject").value.trim();
     const name = document.getElementById("name").value.trim();
@@ -190,147 +186,8 @@ window.addEventListener("DOMContentLoaded", () => {
       alert("❌ 저장 실패: " + err.message);
     }
   });
-});
 
-// ✅ 메시지 처리
-async function onSendMessage(input, chatWindow) {
-  const msg = input.value.trim();
-  if (!msg) return;
-
-  appendMessage("user", msg);
-  input.value = "";
-
-  const messages = [];
-  const systemPrompt = document.getElementById("description").value.trim();
-  if (systemPrompt) {
-    messages.push({ role: "system", content: systemPrompt });
-  }
-
-  const useFewShot = document.getElementById("fewShotToggle").checked;
-  if (useFewShot) {
-    const examples = document.querySelectorAll(".example-input");
-    examples.forEach((textarea) => {
-      const exampleText = textarea.value.trim();
-      if (exampleText.includes("→")) {
-        const [userPart, botPart] = exampleText.split("→").map(s => s.trim());
-        if (userPart && botPart) {
-          messages.push({ role: "user", content: userPart });
-          messages.push({ role: "assistant", content: botPart });
-        }
-      }
-    });
-  }
-
-  const useRag = document.getElementById("ragToggle").checked;
-  const ragFileInput = document.getElementById("ragFile");
-  const ragFile = ragFileInput?.files?.[0];
-
-  const loadingEl = appendMessage("bot", "⏳ RAG 처리 중...");
-
-  const user = auth.currentUser;
-  if (!user) {
-    alert("로그인이 필요합니다.");
-    return;
-  }
-
-  if (useRag && ragFile) {
-    try {
-      const tempPath = `rag-temp/${user.uid}/${Date.now()}_${ragFile.name}`;
-      const fileRef = ref(storage, tempPath);
-      await uploadBytes(fileRef, ragFile);
-
-      const pdfText = await extractTextFromPDFBlob(ragFile);
-      const chunks = chunkText(pdfText);
-      const embeddings = await Promise.all(chunks.map(chunk => getEmbedding(chunk)));
-
-      await supabase.from("documents").insert(
-        chunks.map((chunk, i) => ({
-          user_id: user.uid,
-          file_name: ragFile.name,
-          chunk_text: chunk,
-          embedding: embeddings[i]
-        }))
-      );
-    } catch (err) {
-      loadingEl.remove();
-      appendMessage("bot", "❌ PDF 처리 오류: " + err.message);
-      return;
-    }
-  }
-
-  // ✅ RAG 벡터 검색
-  let ragContext = "";
-  if (useRag) {
-    try {
-      const questionEmbedding = await getEmbedding(msg);
-      const { data: similarChunks, error } = await supabase.rpc("match_documents", {
-        query_embedding_input: questionEmbedding,
-        match_count: 5
-      });
-
-      if (error) {
-        console.error("벡터 검색 오류:", error.message);
-      } else {
-        ragContext = similarChunks.map((c, i) => `자료[${i + 1}]: ${c.chunk_text}`).join("\n");
-        messages.push({
-          role: "system",
-          content: `다음은 업로드한 문서에서 검색된 관련 정보입니다:\n\n${ragContext}`
-        });
-      }
-    } catch (err) {
-      console.error("벡터 검색 중 예외:", err.message);
-    }
-  }
-
-  loadingEl.remove();
-  messages.push({ role: "user", content: msg });
-  const botMessageEl = appendMessage("bot", "💬 답변 생성 중...");
-
-  try {
-    const reply = await sendToOpenAI(messages);
-    const html = marked.parse(reply);
-    botMessageEl.innerHTML = "";
-    animateTypingWithMath(botMessageEl, html);
-  } catch (err) {
-    botMessageEl.innerHTML = "❌ 오류: " + err.message;
-  }
-}
-
-// ✅ 타이핑 애니메이션 수정 (줄바꿈 이슈 해결)
-function animateTypingWithMath(element, html, delay = 30) {
-  const tempDiv = document.createElement("div");
-  tempDiv.innerHTML = html;
-
-  const nodes = Array.from(tempDiv.childNodes);
-  element.innerHTML = "";
-
-  let i = 0;
-  const interval = setInterval(() => {
-    if (i >= nodes.length) {
-      clearInterval(interval);
-      MathJax.typesetPromise([element]);
-      return;
-    }
-    element.appendChild(nodes[i].cloneNode(true));
-    i++;
-    const chatWindow = document.getElementById("chatWindow");
-    chatWindow.scrollTop = chatWindow.scrollHeight;
-  }, delay);
-}
-
-// ✅ ⬇️ 누락되어 있던 appendMessage 함수 추가 (맨 아래에 꼭 넣어주세요!)
-function appendMessage(role, content = "") {
-  const msg = document.createElement("div");
-  msg.className = `chat-message ${role}`;
-  msg.innerHTML = content;
-  const chatWindow = document.getElementById("chatWindow");
-  chatWindow.appendChild(msg);
-  chatWindow.scrollTop = chatWindow.scrollHeight;
-  return msg;
-}
-
-
-  // ✅ editChatbot이 있으면 기존 정보 채우기
+  // ✅ edit 모드
   const saved = localStorage.getItem("editChatbot");
   if (saved) {
     const bot = JSON.parse(saved);
@@ -344,15 +201,13 @@ function appendMessage(role, content = "") {
     document.getElementById("fewShotContainer").classList.toggle("hidden", !bot.useFewShot);
     document.getElementById("selfConsistency").checked = bot.selfConsistency || false;
 
-    // RAG 파일 이름 표시
     if (bot.ragFileName && bot.ragFileUrl) {
       const linkArea = document.getElementById("ragFileLink");
       linkArea.innerHTML = `<a href="${bot.ragFileUrl}" target="_blank">${bot.ragFileName}</a>`;
     }
 
-    // few-shot 예시 채우기
     const examplesArea = document.getElementById("examplesArea");
-    examplesArea.innerHTML = ""; // 초기 예시 삭제
+    examplesArea.innerHTML = "";
     if (bot.examples && bot.examples.length > 0) {
       bot.examples.forEach((example) => {
         const block = document.createElement("div");
@@ -373,7 +228,134 @@ function appendMessage(role, content = "") {
         examplesArea.appendChild(block);
       });
     }
-    
-    // ✅ edit 모드 이후에는 localStorage 제거
+
     localStorage.removeItem("editChatbot");
   }
+});
+
+// ✅ 메시지 전송 로직
+async function onSendMessage(input, chatWindow) {
+  const msg = input.value.trim();
+  if (!msg) return;
+  appendMessage("user", msg);
+  input.value = "";
+
+  const user = auth.currentUser;
+  if (!user) {
+    alert("로그인이 필요합니다.");
+    return;
+  }
+
+  const useRag = document.getElementById("ragToggle").checked;
+  const ragFile = document.getElementById("ragFile")?.files?.[0];
+
+  const useFewShot = document.getElementById("fewShotToggle").checked;
+
+  let ragContext = "";
+  if (useRag && ragFile) {
+    const loadingEl = appendMessage("bot", "⏳ RAG 처리 중...");
+    try {
+      const tempPath = `rag-temp/${user.uid}/${Date.now()}_${ragFile.name}`;
+      const fileRef = ref(storage, tempPath);
+      await uploadBytes(fileRef, ragFile);
+
+      const pdfText = await extractTextFromPDFBlob(ragFile);
+      const chunks = chunkText(pdfText);
+      const embeddings = await Promise.all(chunks.map(getEmbedding));
+
+      await supabase.from("documents").insert(
+        chunks.map((chunk, i) => ({
+          user_id: user.uid,
+          file_name: ragFile.name,
+          chunk_text: chunk,
+          embedding: embeddings[i]
+        }))
+      );
+
+      const questionEmbedding = await getEmbedding(msg);
+      const { data: similarChunks, error } = await supabase.rpc("match_documents", {
+        query_embedding: questionEmbedding,
+        match_count: 5
+      });
+
+      if (!error && similarChunks) {
+        ragContext = similarChunks.map((c, i) => `자료[${i + 1}]: ${c.chunk_text}`).join("\n");
+      }
+    } catch (err) {
+      appendMessage("bot", "❌ PDF 처리 오류: " + err.message);
+      return;
+    } finally {
+      loadingEl.remove();
+    }
+  }
+
+  // ✅ messages 구성
+  const messages = [];
+
+  const description = document.getElementById("description").value.trim();
+  let systemContent = description || "";
+  if (ragContext) {
+    systemContent += `\n\n다음은 업로드한 문서에서 검색된 관련 정보입니다:\n${ragContext}`;
+  }
+  if (systemContent) {
+    messages.push({ role: "system", content: systemContent });
+  }
+
+  if (useFewShot) {
+    const examples = document.querySelectorAll(".example-input");
+    examples.forEach((textarea) => {
+      const exampleText = textarea.value.trim();
+      if (exampleText.includes("→")) {
+        const [userPart, botPart] = exampleText.split("→").map(s => s.trim());
+        if (userPart && botPart) {
+          messages.push({ role: "user", content: userPart });
+          messages.push({ role: "assistant", content: botPart });
+        }
+      }
+    });
+  }
+
+  messages.push({ role: "user", content: msg });
+
+  console.log("📤 최종 messages:", messages);
+
+  const botMessageEl = appendMessage("bot", "💬 답변 생성 중...");
+  try {
+    const reply = await sendToOpenAI(messages);
+    const html = marked.parse(reply);
+    botMessageEl.innerHTML = "";
+    animateTypingWithMath(botMessageEl, html);
+  } catch (err) {
+    botMessageEl.innerHTML = "❌ 오류: " + err.message;
+  }
+}
+
+function animateTypingWithMath(element, html, delay = 30) {
+  const tempDiv = document.createElement("div");
+  tempDiv.innerHTML = html;
+  const nodes = Array.from(tempDiv.childNodes);
+  element.innerHTML = "";
+
+  let i = 0;
+  const interval = setInterval(() => {
+    if (i >= nodes.length) {
+      clearInterval(interval);
+      MathJax.typesetPromise([element]);
+      return;
+    }
+    element.appendChild(nodes[i].cloneNode(true));
+    i++;
+    const chatWindow = document.getElementById("chatWindow");
+    chatWindow.scrollTop = chatWindow.scrollHeight;
+  }, delay);
+}
+
+function appendMessage(role, content = "") {
+  const msg = document.createElement("div");
+  msg.className = `chat-message ${role}`;
+  msg.innerHTML = content;
+  const chatWindow = document.getElementById("chatWindow");
+  chatWindow.appendChild(msg);
+  chatWindow.scrollTop = chatWindow.scrollHeight;
+  return msg;
+}

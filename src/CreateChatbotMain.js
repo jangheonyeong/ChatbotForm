@@ -1,7 +1,20 @@
-// ✅ import 및 초기화
 import { initializeApp } from "firebase/app";
-import { getAuth } from "firebase/auth";
-import { getStorage, ref, uploadBytes } from "firebase/storage";
+import {
+  getAuth
+} from "firebase/auth";
+import {
+  getFirestore,
+  collection,
+  addDoc,
+  updateDoc,
+  doc,
+  serverTimestamp
+} from "firebase/firestore";
+import {
+  getStorage,
+  ref,
+  uploadBytes
+} from "firebase/storage";
 import { firebaseConfig } from "../firebaseConfig.js";
 import { createClient } from "@supabase/supabase-js";
 import * as pdfjsLib from "pdfjs-dist/legacy/build/pdf";
@@ -11,6 +24,7 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = pdfWorker;
 
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
+const db = getFirestore(app);
 const storage = getStorage(app);
 
 const supabase = createClient(
@@ -98,7 +112,6 @@ window.addEventListener("DOMContentLoaded", () => {
     document.getElementById("ragUpload").classList.toggle("hidden", !ragToggle.checked);
   });
 
-  // few-shot 관련 UI 처리
   const fewShotToggle = document.getElementById("fewShotToggle");
   const fewShotContainer = document.getElementById("fewShotContainer");
   fewShotToggle.addEventListener("change", () => {
@@ -123,6 +136,60 @@ window.addEventListener("DOMContentLoaded", () => {
     block.appendChild(delBtn);
     document.getElementById("examplesArea").appendChild(block);
   });
+
+  // ✅ 저장 기능 추가
+  const form = document.getElementById("chatbotForm");
+  form.addEventListener("submit", async (e) => {
+    e.preventDefault();
+
+    const chatbotId = document.getElementById("chatbotId").value;
+    const subject = document.getElementById("subject").value.trim();
+    const name = document.getElementById("name").value.trim();
+    const description = document.getElementById("description").value.trim();
+    const rag = document.getElementById("ragToggle").checked;
+    const fewShot = document.getElementById("fewShotToggle").checked;
+    const selfConsistency = document.getElementById("selfConsistency").checked;
+
+    const examples = [];
+    if (fewShot) {
+      const exampleInputs = document.querySelectorAll(".example-input");
+      exampleInputs.forEach((el) => {
+        if (el.value.trim()) {
+          examples.push(el.value.trim());
+        }
+      });
+    }
+
+    const user = auth.currentUser;
+    if (!user) {
+      alert("로그인이 필요합니다.");
+      return;
+    }
+
+    const data = {
+      uid: user.uid,
+      subject,
+      name,
+      description,
+      rag,
+      fewShot,
+      selfConsistency,
+      examples,
+      createdAt: serverTimestamp(),
+    };
+
+    try {
+      if (chatbotId) {
+        const chatbotRef = doc(db, "chatbots", chatbotId);
+        await updateDoc(chatbotRef, data);
+      } else {
+        await addDoc(collection(db, "chatbots"), data);
+      }
+      alert("✅ 저장이 완료되었습니다!");
+    } catch (err) {
+      alert("❌ 저장 실패: " + err.message);
+    }
+  });
 });
 
 // ✅ 메시지 처리
@@ -139,7 +206,6 @@ async function onSendMessage(input, chatWindow) {
     messages.push({ role: "system", content: systemPrompt });
   }
 
-  // ✅ few-shot 예시 추가
   const useFewShot = document.getElementById("fewShotToggle").checked;
   if (useFewShot) {
     const examples = document.querySelectorAll(".example-input");
@@ -230,7 +296,29 @@ async function onSendMessage(input, chatWindow) {
   }
 }
 
-// ✅ 출력 유틸
+// ✅ 타이핑 애니메이션 수정 (줄바꿈 이슈 해결)
+function animateTypingWithMath(element, html, delay = 30) {
+  const tempDiv = document.createElement("div");
+  tempDiv.innerHTML = html;
+
+  const nodes = Array.from(tempDiv.childNodes);
+  element.innerHTML = "";
+
+  let i = 0;
+  const interval = setInterval(() => {
+    if (i >= nodes.length) {
+      clearInterval(interval);
+      MathJax.typesetPromise([element]);
+      return;
+    }
+    element.appendChild(nodes[i].cloneNode(true));
+    i++;
+    const chatWindow = document.getElementById("chatWindow");
+    chatWindow.scrollTop = chatWindow.scrollHeight;
+  }, delay);
+}
+
+// ✅ ⬇️ 누락되어 있던 appendMessage 함수 추가 (맨 아래에 꼭 넣어주세요!)
 function appendMessage(role, content = "") {
   const msg = document.createElement("div");
   msg.className = `chat-message ${role}`;
@@ -241,19 +329,51 @@ function appendMessage(role, content = "") {
   return msg;
 }
 
-function animateTypingWithMath(element, html, delay = 30) {
-  const words = html.split(/(\s+)/);
-  let i = 0;
-  element.innerHTML = "";
-  const interval = setInterval(() => {
-    if (i >= words.length) {
-      clearInterval(interval);
-      return;
+
+  // ✅ editChatbot이 있으면 기존 정보 채우기
+  const saved = localStorage.getItem("editChatbot");
+  if (saved) {
+    const bot = JSON.parse(saved);
+    document.getElementById("chatbotId").value = bot.id || "";
+    document.getElementById("subject").value = bot.subject || "";
+    document.getElementById("name").value = bot.name || "";
+    document.getElementById("description").value = bot.description || "";
+    document.getElementById("ragToggle").checked = bot.rag || false;
+    document.getElementById("ragUpload").classList.toggle("hidden", !bot.rag);
+    document.getElementById("fewShotToggle").checked = bot.useFewShot || false;
+    document.getElementById("fewShotContainer").classList.toggle("hidden", !bot.useFewShot);
+    document.getElementById("selfConsistency").checked = bot.selfConsistency || false;
+
+    // RAG 파일 이름 표시
+    if (bot.ragFileName && bot.ragFileUrl) {
+      const linkArea = document.getElementById("ragFileLink");
+      linkArea.innerHTML = `<a href="${bot.ragFileUrl}" target="_blank">${bot.ragFileName}</a>`;
     }
-    element.innerHTML += words[i];
-    MathJax.typesetPromise([element]);
-    i++;
-    const chatWindow = document.getElementById("chatWindow");
-    chatWindow.scrollTop = chatWindow.scrollHeight;
-  }, delay);
-}
+
+    // few-shot 예시 채우기
+    const examplesArea = document.getElementById("examplesArea");
+    examplesArea.innerHTML = ""; // 초기 예시 삭제
+    if (bot.examples && bot.examples.length > 0) {
+      bot.examples.forEach((example) => {
+        const block = document.createElement("div");
+        block.className = "example-block";
+
+        const textarea = document.createElement("textarea");
+        textarea.className = "example-input";
+        textarea.value = example;
+
+        const delBtn = document.createElement("button");
+        delBtn.textContent = "✕";
+        delBtn.type = "button";
+        delBtn.className = "delete-example";
+        delBtn.addEventListener("click", () => block.remove());
+
+        block.appendChild(textarea);
+        block.appendChild(delBtn);
+        examplesArea.appendChild(block);
+      });
+    }
+    
+    // ✅ edit 모드 이후에는 localStorage 제거
+    localStorage.removeItem("editChatbot");
+  }

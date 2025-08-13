@@ -5,14 +5,39 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>챗봇 제작</title>
   <link rel="stylesheet" href="CreateChatbotStyles.css" />
-  <script src="https://polyfill.io/v3/polyfill.min.js?features=es6"></script>
+
+  <!-- 수식/마크다운 -->
   <script id="MathJax-script" async src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+
+  <style>
+    .hidden{ display:none; }
+    .main-container{ display:flex; gap:24px; align-items:flex-start; }
+    .form-panel,.preview-panel{ flex:1; border:1px solid #ddd; border-radius:12px; padding:16px; }
+    .chat-window{ height:420px; overflow:auto; border:1px solid #eee; border-radius:8px; padding:12px; background:#fafafa; }
+    .input-panel{ display:flex; gap:8px; margin-top:12px; }
+    .input-panel input[type="text"]{ flex:1; padding:8px; }
+    .chat-message{ padding:10px 12px; margin:10px 0; border-radius:10px; line-height:1.5; }
+    .chat-message.user{ background:#e8f0ff; align-self:flex-end; }
+    .chat-message.bot{ background:#f3f4f6; }
+    .example-block{ display:flex; gap:8px; align-items:flex-start; margin:8px 0; }
+    .example-input{ flex:1; min-height:64px; }
+    .delete-example{ border:none; background:#eee; border-radius:8px; padding:4px 8px; cursor:pointer; }
+    .top-buttons{ display:flex; gap:8px; margin-bottom:12px; }
+    .top-buttons a{ display:inline-flex; align-items:center; gap:6px; padding:6px 10px; border-radius:8px; background:#222; color:#fff; text-decoration:none; }
+    .home-icon{ width:18px; height:18px; }
+    .status{ display:inline-flex; align-items:center; gap:8px; font-size:12px; background:#f6f8fa; border:1px solid #e5e7eb; border-radius:999px; padding:6px 10px; }
+    .status .dot{ width:8px; height:8px; border-radius:999px; background:#e5e7eb; }
+    .status.ready .dot{ background:#10b981; }
+    .status.busy  .dot{ background:#f59e0b; }
+    .status.error .dot{ background:#ef4444; }
+  </style>
 </head>
 <body>
   <div class="top-buttons">
     <a href="AfterLogIn.html" class="home-btn" title="홈으로">
       <img src="https://img.icons8.com/ios-filled/24/ffffff/home.png" alt="홈" class="home-icon" />
+      홈
     </a>
     <a href="ChatbotList.html" class="nav-btn">챗봇 목록 보기</a>
   </div>
@@ -25,33 +50,41 @@
         <input type="hidden" id="chatbotId" />
         <label for="subject">교과</label>
         <input type="text" id="subject" name="subject" required />
+
         <label for="name">이름</label>
         <input type="text" id="name" name="name" required />
-        <label for="description">설명</label>
-        <textarea id="description" name="description" required></textarea>
 
-        <label><input type="checkbox" id="ragToggle" /> RAG</label>
+        <label for="description">설명(시스템 프롬프트)</label>
+        <textarea id="description" name="description" placeholder="예) 업로드 문서를 근거로만 답하세요. 근거 없으면 모른다고 답하세요." required></textarea>
+
+        <div class="status" id="ragStatus"><span class="dot"></span><span class="text">RAG 준비 전</span></div>
+        <br /><br />
+
+        <label><input type="checkbox" id="ragToggle" /> RAG(File Search)</label>
         <div id="ragUpload" class="hidden">
           <label for="ragFile">PDF 업로드</label>
-          <input type="file" id="ragFile" accept=".pdf" />
+          <input type="file" id="ragFile" accept=".pdf" multiple />
           <div id="ragFileLink"></div>
         </div>
 
         <label><input type="checkbox" id="fewShotToggle" /> few-shot</label>
         <div id="fewShotContainer" class="hidden">
+          <p style="margin:6px 0 8px;">형식: <code>사용자 예시 → 모델 답</code></p>
           <div id="examplesArea">
             <div class="example-block">
-              <textarea class="example-input" placeholder="예시를 입력하세요."></textarea>
+              <textarea class="example-input" placeholder="예) 피타고라스 정리 알려줘 → 직각삼각형에서..."></textarea>
               <button type="button" class="delete-example">✕</button>
             </div>
           </div>
           <button type="button" id="addExample">+ 예시 추가</button>
         </div>
 
-        <label><input type="checkbox" id="selfConsistency" /> self-consistency</label>
+        <label><input type="checkbox" id="selfConsistency" /> self-consistency(다수결)</label>
 
-        <button type="submit">저장하기</button>
-        <button type="button" id="testButton">테스트하기</button>
+        <div style="display:flex; gap:8px; margin-top:10px;">
+          <button type="submit">저장하기</button>
+          <button type="button" id="testButton">테스트하기</button>
+        </div>
       </form>
     </div>
 
@@ -60,16 +93,18 @@
       <h3>실시간 챗봇 미리보기</h3>
       <div id="chatWindow" class="chat-window"></div>
       <div class="input-panel">
-        <label class="upload-icon">
+        <label class="upload-icon" title="이미지 첨부(미사용)">
           📎
           <input type="file" id="imageInput" accept="image/*" hidden />
         </label>
         <input type="text" id="userMessage" placeholder="메시지를 입력하세요..." />
-        <button id="sendMessage">➤</button>
+        <!-- ✅ 기본값: 항상 활성화(비 RAG 모드에서도 바로 사용) -->
+        <button id="sendMessage" type="button">➤</button>
       </div>
     </div>
   </div>
 
+  <!-- 메인 스크립트 -->
   <script type="module" src="src/CreateChatbotMain.js"></script>
 </body>
 </html>

@@ -9,18 +9,22 @@
 <body>
   <div class="list-container">
     <div class="top-buttons">
-      <!-- ✅ 집 모양 아이콘으로 교체 -->
+      <!-- ✅ 홈 버튼 (집 아이콘) -->
       <a href="AfterLogIn.html" class="home-btn" title="홈으로">
         <img src="https://img.icons8.com/ios-filled/24/ffffff/home.png" alt="홈" class="home-icon" />
       </a>
 
+      <!-- ✅ 챗봇 제작 페이지 이동 (수정 시에도 재활용) -->
       <a href="CreateChatbot.html" class="nav-btn right">챗봇 제작</a>
     </div>
 
     <h2>챗봇 목록</h2>
-    <div id="chatbotList" class="list-wrapper"></div>
+    <div id="chatbotList" class="list-wrapper">
+      <!-- ✅ 챗봇 카드들이 JS에서 렌더링될 예정 -->
+    </div>
   </div>
 
+  <!-- ✅ 주요 동작 로직이 들어 있는 JS 모듈 -->
   <script type="module" src="src/ChatbotListMain.js"></script>
 </body>
 </html>

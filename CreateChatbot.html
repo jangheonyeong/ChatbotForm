@@ -7,10 +7,6 @@
   <link rel="stylesheet" href="CreateChatbotStyles.css" />
 
   <!-- 수식/마크다운 -->
-  <!-- ❌ 삭제: polyfill.io -->
-  <!-- <script src="https://polyfill.io/v3/polyfill.min.js?features=es6"></script> -->
-
-  <!-- ✅ 수식 표현과 마크다운 지원 -->
   <script id="MathJax-script" async src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
 
@@ -52,7 +48,6 @@
       <h2>챗봇 제작</h2>
       <form id="chatbotForm">
         <input type="hidden" id="chatbotId" />
-        
         <label for="subject">교과</label>
         <input type="text" id="subject" name="subject" required />
 
@@ -93,7 +88,7 @@
       </form>
     </div>
 
-    <!-- 실시간 미리보기 -->
+    <!-- 미리보기 -->
     <div class="preview-panel">
       <h3>실시간 챗봇 미리보기</h3>
       <div id="chatWindow" class="chat-window"></div>

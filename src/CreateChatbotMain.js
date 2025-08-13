@@ -171,8 +171,9 @@ window.addEventListener("DOMContentLoaded", () => {
 
   // few-shot 토글/추가 버튼
   const fewShotToggle = document.getElementById("fewShotToggle");
+  const fewShotContainer = document.getElementById("fewShotContainer");
   fewShotToggle.addEventListener("change", () => {
-    document.getElementById("fewShotContainer").classList.toggle("hidden", !fewShotToggle.checked);
+    fewShotContainer.classList.toggle("hidden", !fewShotToggle.checked);
   });
   document.getElementById("addExample").addEventListener("click", () => {
     const block = document.createElement("div");
@@ -241,6 +242,7 @@ window.addEventListener("DOMContentLoaded", () => {
 async function onSendMessage(inputEl) {
   const msg = inputEl.value.trim();
   if (!msg) return;
+
   appendMessage("user", msg);
   inputEl.value = "";
 
@@ -266,9 +268,6 @@ async function onSendMessage(inputEl) {
   const systemPrompt = document.getElementById("description").value.trim();
   const thinking = appendMessage("bot", "💬 답변 생성 중...");
 
-  console.log("📤 최종 messages:", messages);
-
-  const botMessageEl = appendMessage("bot", "💬 답변 생성 중...");
   try {
     const text = await askWithFileSearch({
       model: "gpt-4o-mini",

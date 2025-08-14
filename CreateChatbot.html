@@ -4,40 +4,18 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>챗봇 제작</title>
+
+  <!-- 외부 스타일 -->
   <link rel="stylesheet" href="CreateChatbotStyles.css" />
 
   <!-- 수식/마크다운 -->
   <script id="MathJax-script" async src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
-
-  <style>
-    .hidden{ display:none; }
-    .main-container{ display:flex; gap:24px; align-items:flex-start; }
-    .form-panel,.preview-panel{ flex:1; border:1px solid #ddd; border-radius:12px; padding:16px; }
-    .chat-window{ height:420px; overflow:auto; border:1px solid #eee; border-radius:8px; padding:12px; background:#fafafa; }
-    .input-panel{ display:flex; gap:8px; margin-top:12px; }
-    .input-panel input[type="text"]{ flex:1; padding:8px; }
-    .chat-message{ padding:10px 12px; margin:10px 0; border-radius:10px; line-height:1.5; }
-    .chat-message.user{ background:#e8f0ff; align-self:flex-end; }
-    .chat-message.bot{ background:#f3f4f6; }
-    .example-block{ display:flex; gap:8px; align-items:flex-start; margin:8px 0; }
-    .example-input{ flex:1; min-height:64px; }
-    .delete-example{ border:none; background:#eee; border-radius:8px; padding:4px 8px; cursor:pointer; }
-    .top-buttons{ display:flex; gap:8px; margin-bottom:12px; }
-    .top-buttons a{ display:inline-flex; align-items:center; gap:6px; padding:6px 10px; border-radius:8px; background:#222; color:#fff; text-decoration:none; }
-    .home-icon{ width:18px; height:18px; }
-    .status{ display:inline-flex; align-items:center; gap:8px; font-size:12px; background:#f6f8fa; border:1px solid #e5e7eb; border-radius:999px; padding:6px 10px; }
-    .status .dot{ width:8px; height:8px; border-radius:999px; background:#e5e7eb; }
-    .status.ready .dot{ background:#10b981; }
-    .status.busy  .dot{ background:#f59e0b; }
-    .status.error .dot{ background:#ef4444; }
-  </style>
 </head>
 <body>
   <div class="top-buttons">
     <a href="AfterLogIn.html" class="home-btn" title="홈으로">
       <img src="https://img.icons8.com/ios-filled/24/ffffff/home.png" alt="홈" class="home-icon" />
-      홈
     </a>
     <a href="ChatbotList.html" class="nav-btn">챗봇 목록 보기</a>
   </div>
@@ -69,7 +47,7 @@
 
         <label><input type="checkbox" id="fewShotToggle" /> few-shot</label>
         <div id="fewShotContainer" class="hidden">
-          <p style="margin:6px 0 8px;">형식: <code>사용자 예시 → 모델 답</code></p>
+          <p style="margin:6px 0 8px;">형식: <code>사용자 예시 → 모델 답</code> ( <code>-></code>, <code>=&gt;</code>, <code>|</code>, <code>:</code> 도 가능 )</p>
           <div id="examplesArea">
             <div class="example-block">
               <textarea class="example-input" placeholder="예) 피타고라스 정리 알려줘 → 직각삼각형에서..."></textarea>
@@ -98,7 +76,6 @@
           <input type="file" id="imageInput" accept="image/*" hidden />
         </label>
         <input type="text" id="userMessage" placeholder="메시지를 입력하세요..." />
-        <!-- ✅ 기본값: 항상 활성화(비 RAG 모드에서도 바로 사용) -->
         <button id="sendMessage" type="button">➤</button>
       </div>
     </div>

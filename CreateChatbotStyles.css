@@ -1,13 +1,18 @@
+/* 페이지 레이아웃 — 화면 중앙 배치 */
 body {
   margin: 0;
   font-family: "Noto Sans KR", sans-serif;
   background-color: #f5f8fc;
+  min-height: 100vh;
+
+  /* ★ 중앙 정렬 핵심 */
   display: flex;
   flex-direction: column;
   align-items: center;
-  min-height: 100vh;
+  justify-content: center;
 }
 
+/* 상단 버튼 영역 */
 .top-buttons {
   display: flex;
   justify-content: space-between;
@@ -16,8 +21,10 @@ body {
   max-width: 1200px;
   padding: 16px 32px;
   box-sizing: border-box;
+  margin-bottom: 8px;
 }
 
+/* ★ 버튼 색상 네이비 통일 (#003478) */
 .home-btn {
   background-color: #003478;
   padding: 10px;
@@ -30,7 +37,7 @@ body {
 
 .nav-btn {
   background-color: #003478;
-  color: white;
+  color: #ffffff;
   padding: 10px 16px;
   border: none;
   border-radius: 8px;
@@ -39,15 +46,19 @@ body {
   cursor: pointer;
 }
 
+/* 메인 컨테이너 */
 .main-container {
   display: flex;
   justify-content: center;
   gap: 24px;
   width: 100%;
   max-width: 1200px;
-  margin: 30px 0 60px;
+
+  /* ★ 상단으로 붙던 여백 제거 → 중앙 정렬 유지 */
+  margin: 0;
 }
 
+/* 카드 패널 */
 .form-panel, .preview-panel {
   flex: 1;
   border-radius: 16px;
@@ -56,6 +67,7 @@ body {
   box-shadow: 0 10px 25px rgba(0, 0, 0, 0.08);
 }
 
+/* 우측 미리보기 영역 */
 .preview-panel {
   background-color: #eef3ff;
   display: flex;
@@ -68,6 +80,7 @@ h2, h3 {
   margin-bottom: 24px;
 }
 
+/* 폼 */
 form {
   display: flex;
   flex-direction: column;
@@ -87,6 +100,7 @@ textarea {
   height: 100px;
 }
 
+/* 버튼 */
 button[type="submit"], #testButton {
   background-color: #003478;
   color: white;
@@ -100,8 +114,26 @@ button[type="submit"]:hover, #testButton:hover {
   background-color: #0050aa;
 }
 
+/* 공통 유틸 */
 .hidden { display: none; }
 
+/* 상태 배지 (.status) — 기존 인라인 스타일을 CSS로 이동 */
+.status {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  background: #f6f8fa;
+  border: 1px solid #e5e7eb;
+  border-radius: 999px;
+  padding: 6px 10px;
+}
+.status .dot { width: 8px; height: 8px; border-radius: 999px; background: #e5e7eb; }
+.status.ready .dot { background: #10b981; }
+.status.busy  .dot { background: #f59e0b; }
+.status.error .dot { background: #ef4444; }
+
+/* 채팅창 */
 .chat-window {
   flex: 1;
   background: white;
@@ -122,8 +154,9 @@ button[type="submit"]:hover, #testButton:hover {
   word-break: break-word;
 }
 .chat-message.user { align-self: flex-end; background-color: #cce5ff; }
-.chat-message.bot { align-self: flex-start; background-color: #f0f0f0; }
+.chat-message.bot  { align-self: flex-start; background-color: #f0f0f0; }
 
+/* 입력 박스 */
 .input-panel {
   display: flex;
   align-items: center;

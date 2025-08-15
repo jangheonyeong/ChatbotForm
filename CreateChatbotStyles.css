@@ -4,8 +4,6 @@ body {
   font-family: "Noto Sans KR", sans-serif;
   background-color: #f5f8fc;
   min-height: 100vh;
-
-  /* ★ 중앙 정렬 핵심 */
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -24,7 +22,7 @@ body {
   margin-bottom: 8px;
 }
 
-/* ★ 버튼 색상 네이비 통일 (#003478) */
+/* 버튼 색상 네이비 통일 (#003478) */
 .home-btn {
   background-color: #003478;
   padding: 10px;
@@ -53,8 +51,6 @@ body {
   gap: 24px;
   width: 100%;
   max-width: 1200px;
-
-  /* ★ 상단으로 붙던 여백 제거 → 중앙 정렬 유지 */
   margin: 0;
 }
 
@@ -87,7 +83,7 @@ form {
   gap: 16px;
 }
 
-input[type="text"], textarea, input[type="file"] {
+input[type="text"], textarea, input[type="file"], select {
   padding: 10px;
   border: 1px solid #ccc;
   border-radius: 8px;
@@ -98,6 +94,12 @@ input[type="text"], textarea, input[type="file"] {
 textarea {
   resize: vertical;
   height: 100px;
+}
+
+.model-row {
+  display: flex;
+  gap: 8px;
+  align-items: center;
 }
 
 /* 버튼 */
@@ -117,7 +119,7 @@ button[type="submit"]:hover, #testButton:hover {
 /* 공통 유틸 */
 .hidden { display: none; }
 
-/* 상태 배지 (.status) — 기존 인라인 스타일을 CSS로 이동 */
+/* 상태 배지 */
 .status {
   display: inline-flex;
   align-items: center;

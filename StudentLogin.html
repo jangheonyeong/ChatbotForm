@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>학생 접속</title>
+  <link rel="stylesheet" href="StudentLoginStyles.css" />
+</head>
+<body>
+  <div class="container">
+    <div class="topbar">
+      <a href="index.html" class="home-btn" title="처음으로">
+        <img src="https://img.icons8.com/ios-filled/24/ffffff/home.png" alt="홈" />
+      </a>
+      <h1>학생 접속</h1>
+      <div class="spacer"></div>
+    </div>
+
+    <div class="card">
+      <p class="subtitle">
+        닉네임은 <strong>첫 입력 후 이 브라우저에서 고정</strong>됩니다. (초기화 시 재설정 가능)
+      </p>
+
+      <label for="nickname" class="label">닉네임</label>
+      <input id="nickname" class="input" type="text" placeholder="예: 과학짱" maxlength="20" />
+      <p id="nickStatus" class="tiny"></p>
+
+      <div class="divider"></div>
+
+      <label for="assistantId" class="label">Assistants ID</label>
+      <input id="assistantId" class="input mono" type="text" placeholder="예: asst_dyIpwwEGjPED0etv4G4wajIe" />
+
+      <div class="row">
+        <button id="saveBtn" class="btn ghost">닉네임 저장</button>
+        <button id="startBtn" class="btn primary">이 챗봇으로 시작</button>
+      </div>
+
+      <p class="tiny">
+        문제가 있나요?
+        <button id="resetBtn" class="link">닉네임 초기화</button>
+      </p>
+    </div>
+  </div>
+
+  <script type="module" src="src/StudentLoginMain.js"></script>
+</body>
+</html>

@@ -5,7 +5,7 @@ import {
 } from "firebase/firestore";
 import {
   getStorage, ref as sRef, getBlob, getBytes, deleteObject, getDownloadURL
-} from "firebase/storage"; // ⬅️ getDownloadURL 추가
+} from "firebase/storage";
 import { firebaseConfig } from "../firebaseConfig.js";
 
 /* ===== Firebase ===== */
@@ -79,7 +79,7 @@ function toast(text, ms = 1400) {
   document.body.appendChild(t);
   setTimeout(() => t.remove(), ms);
 }
-/* ▼ few-shot 포함 + 줄바꿈 보존용 렌더러 추가 */
+/* few-shot 포함 */
 function buildInstructions(desc, useRag, useFewShot, examples) {
   const guard = `한국어로 답하세요. 먼저 요지를 3–6문장으로 제시하세요. 추측/환각 금지.`;
   const ragGuide = useRag ? `업로드 문서 근거를 우선 사용하세요. 문서와 무관하면 일반 지식으로 답하세요.` : "";
@@ -94,7 +94,6 @@ function buildInstructions(desc, useRag, useFewShot, examples) {
 
   return [desc || "", guard, ragGuide, few].filter(Boolean).join("\n\n");
 }
-/* 줄바꿈 그대로 보여주기 */
 function renderMultiline(text) {
   return `<div style="white-space:pre-wrap;">${escapeHtml(text || "")}</div>`;
 }
@@ -144,20 +143,16 @@ function normalizeRagFiles(data) {
   return [];
 }
 
-/** Storage SDK만 사용해서 Blob 획득 (CORS 회피: URL 직접 fetch 금지) */
+/** Storage SDK만 사용해서 Blob 획득 (CORS 회피) */
 async function downloadPdfBlob(meta) {
-  // 1) path(또는 gs://) → 상대경로로 정규화
   let path = toBucketRelativePath(meta?.path || "");
-  // 2) path가 없으면 url에서 경로만 추출해 사용
   if (!path && meta?.url) path = pathFromUrl(meta.url);
-
   if (!path) throw new Error("파일을 다운로드할 수 없습니다. (path 누락)");
 
   const refObj = sRef(storage, path);
   try {
     return await getBlob(refObj);
   } catch {
-    // getBlob 실패 시 getBytes 폴백
     const ab = await getBytes(refObj);
     return new Blob([ab], { type: "application/pdf" });
   }
@@ -176,10 +171,8 @@ async function upsertAssistant({ existingAssistantId, model, name, instructions,
   };
 
   if (existingAssistantId) {
-    // v2 업데이트: POST /assistants/{id}
     return openaiFetch(`/assistants/${existingAssistantId}`, { method: "POST", body });
   } else {
-    // 생성: POST /assistants
     return openaiFetch("/assistants", { method: "POST", body });
   }
 }
@@ -237,7 +230,6 @@ function renderCard(docSnap) {
 
   const ragList = normalizeRagFiles(data);
 
-  // 링크는 클릭 시점에 안전 URL 생성(getDownloadURL) → href로 직접 요청하지 않음
   const ragFilesHtml = ragList.length
     ? ragList.map((m, i) => {
         const label = `${i + 1}. ${escapeHtml(m.name || `파일 ${i + 1}`)}`;
@@ -248,7 +240,6 @@ function renderCard(docSnap) {
       }).join("")
     : "없음";
 
-  /* ▼ 줄바꿈 보존하여 렌더링 */
   const examplesHtml = examples.length
     ? examples.map((e,i)=>`<div style="white-space:pre-wrap;">${i+1}. ${escapeHtml(e)}</div>`).join("")
     : "없음";
@@ -272,14 +263,11 @@ function renderCard(docSnap) {
     </div>
   `;
 
-  // ===== 생성 버튼 =====
   const createBtn = card.querySelector(".create-btn");
 
-  // 이미 assistantId가 있으면 라벨 변경
-  const existingAssistantId = data.assistantId ?? null;
-  if (existingAssistantId) {
-    createBtn.textContent = "다시 생성/업데이트";
-  }
+  // 이미 assistantId가 있으면 기본 라벨 교체
+  let currentAssistantId = data.assistantId ?? null;
+  if (currentAssistantId) createBtn.textContent = "다시 생성/업데이트";
 
   createBtn.addEventListener("click", async () => {
     try {
@@ -287,8 +275,8 @@ function renderCard(docSnap) {
         alert("OpenAI API 키가 설정되어 있지 않습니다. VITE_OPENAI_API_KEY를 설정하세요.");
         return;
       }
-      setCreateState(createBtn, existingAssistantId ? "업데이트 중…" : "생성 중…", true);
-      toast(existingAssistantId ? "Assistant 업데이트 준비…" : "Assistant 생성 준비…");
+      setCreateState(createBtn, currentAssistantId ? "업데이트 중…" : "생성 중…", true);
+      toast(currentAssistantId ? "Assistant 업데이트 준비…" : "Assistant 생성 준비…");
 
       const model =
         (data.model && String(data.model)) ||
@@ -306,7 +294,7 @@ function renderCard(docSnap) {
         let ok = 0;
         for (const m of ragList) {
           try {
-            const blob = await downloadPdfBlob(m);  // ⬅️ SDK 전용 다운로드 (CORS 회피)
+            const blob = await downloadPdfBlob(m);
             const file = new File([blob], m.name || "document.pdf", { type: "application/pdf" });
             const up = await uploadFileToOpenAI(file);
             await attachToVS(vectorStoreId, up.id);
@@ -317,17 +305,16 @@ function renderCard(docSnap) {
           }
         }
         if (ok === 0) {
-          vectorStoreId = null; // 전부 실패 → RAG 없이 생성/업데이트
+          vectorStoreId = null;
           toast("⚠️ RAG 파일 인덱싱 실패로 RAG 없이 진행합니다.", 2000);
         }
       }
 
-      /* ▼ few-shot 전달 */
       const instructions = buildInstructions(description, !!vectorStoreId, useFewShot, examples);
 
-      toast(existingAssistantId ? "Assistant 업데이트 중…" : "Assistant 생성 중…");
+      toast(currentAssistantId ? "Assistant 업데이트 중…" : "Assistant 생성 중…");
       const assistant = await upsertAssistant({
-        existingAssistantId,
+        existingAssistantId: currentAssistantId,
         model,
         name,
         instructions,
@@ -339,20 +326,23 @@ function renderCard(docSnap) {
         assistantId: assistant.id,
         vectorStoreId: vectorStoreId || null,
         assistantModelSnapshot: model,
-        assistantCreatedAt: existingAssistantId ? (data.assistantCreatedAt || serverTimestamp()) : serverTimestamp(),
+        assistantCreatedAt: currentAssistantId ? (data.assistantCreatedAt || serverTimestamp()) : serverTimestamp(),
         assistantUpdatedAt: serverTimestamp()
       });
 
-      toast(existingAssistantId ? "✅ 업데이트 완료!" : "✅ 생성 완료!");
-      setCreateState(createBtn, existingAssistantId ? "업데이트 완료" : "생성 완료", true);
+      // ✅ 성공 후에도 버튼을 다시 쓸 수 있게:
+      currentAssistantId = assistant.id;               // 메모리에 반영
+      setCreateState(createBtn, "다시 생성/업데이트", false); // 라벨/활성화
+      toast(currentAssistantId ? "✅ 업데이트 완료!" : "✅ 생성 완료!");
+
     } catch (e) {
       console.error(e);
       alert("생성/업데이트 실패: " + (e?.message || e));
-      setCreateState(createBtn, existingAssistantId ? "다시 생성/업데이트" : "생성", false);
+      setCreateState(createBtn, currentAssistantId ? "다시 생성/업데이트" : "생성", false);
     }
   });
 
-  // ===== 수정 버튼 (기존 흐름 유지) =====
+  // 수정
   const editBtn = card.querySelector(".edit-btn");
   editBtn.addEventListener("click", () => {
     const payload = {
@@ -373,7 +363,7 @@ function renderCard(docSnap) {
     window.location.href = `CreateChatbot.html?id=${encodeURIComponent(docSnap.id)}`;
   });
 
-  // ===== 삭제 버튼 =====
+  // 삭제
   const deleteBtn = card.querySelector(".delete-btn");
   deleteBtn.addEventListener("click", async () => {
     const confirmDelete = confirm("정말 삭제하시겠습니까?");
@@ -396,7 +386,7 @@ function renderCard(docSnap) {
     }
   });
 
-  // ===== RAG 링크 클릭 시 안전 URL 생성하여 새 탭 오픈 =====
+  // RAG 링크: 안전 URL 생성 후 새 탭
   card.addEventListener("click", async (e) => {
     const a = e.target.closest("a.rag-link");
     if (!a) return;

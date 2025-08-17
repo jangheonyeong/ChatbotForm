@@ -23,7 +23,8 @@ export default defineConfig({
         French: resolve(__dirname, 'French.html'),
         Physics: resolve(__dirname, 'Physics.html'),
         Geography: resolve(__dirname, 'Geography.html'),
-        Biology: resolve(__dirname, 'Biology.html')
+        Biology: resolve(__dirname, 'Biology.html'),
+        StudentLogin: resolve(__dirname, 'StudentLogin.html')
       },
     },
   },

@@ -1,0 +1,153 @@
+/* 공통 레이아웃 & 테마 */
+*,
+*::before,
+*::after { box-sizing: border-box; }
+
+:root {
+  --brand: #003478;
+  --brand-hover: #0050aa;
+  --bg: #f7f9fc;
+  --card: #fff;
+  --muted: #6b7280;
+  --border: #e5eaf1;
+}
+
+body {
+  margin: 0;
+  font-family: "Noto Sans KR", system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+  background: var(--bg);
+  min-height: 100vh;
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+}
+
+/* 상단 */
+.container {
+  width: min(760px, 94vw);
+  margin: 48px auto;
+}
+
+.topbar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.topbar h1 {
+  flex: 0 0 auto;
+  margin: 0;
+  font-size: 24px;
+  color: var(--brand);
+}
+
+.spacer { flex: 1; }
+
+.home-btn {
+  background: var(--brand);
+  padding: 8px 10px;
+  border-radius: 10px;
+  display: inline-flex;
+}
+
+/* 카드 */
+.card {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 20px;
+  box-shadow: 0 6px 18px rgba(0,0,0,.06);
+}
+
+.subtitle {
+  margin: 0 0 14px;
+  color: var(--muted);
+  font-size: 14px;
+}
+
+.label {
+  display: block;
+  margin: 8px 0 6px;
+  font-size: 13px;
+  color: #374151;
+}
+
+.input {
+  width: 100%;
+  padding: 10px 12px;
+  border: 1px solid #d2dae3;
+  border-radius: 10px;
+  font-size: 14px;
+  outline: none;
+  background: #fff;
+}
+
+.input[readonly] {
+  background: #f1f4f9;
+  color: #4b5563;
+  cursor: not-allowed;
+}
+
+.mono {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+}
+
+/* 구분선 */
+.divider {
+  height: 1px;
+  background: var(--border);
+  margin: 16px 0;
+}
+
+/* 버튼 */
+.row {
+  display: flex;
+  gap: 10px;
+  margin-top: 12px;
+}
+
+.btn {
+  flex: 1;
+  padding: 12px 16px;
+  font-size: 15px;
+  border: none;
+  border-radius: 10px;
+  cursor: pointer;
+  transition: background-color .2s, opacity .2s;
+  color: #fff;
+  background: var(--brand);
+}
+.btn:hover { background: var(--brand-hover); }
+
+.btn.primary { background: var(--brand); }
+.btn.primary:hover { background: var(--brand-hover); }
+
+.btn.ghost {
+  background: #eef2f8;
+  color: #0b1c3f;
+}
+.btn.ghost:hover { background: #dde6f3; }
+
+.btn[disabled] {
+  opacity: .6;
+  cursor: not-allowed;
+}
+
+/* 보조 텍스트 & 링크 */
+.tiny {
+  margin-top: 8px;
+  color: #8a94a6;
+  font-size: 12px;
+}
+
+.link {
+  display: inline;
+  background: transparent;
+  border: none;
+  color: var(--brand);
+  cursor: pointer;
+  padding: 0;
+  font: inherit;
+}
+.link:hover { color: var(--brand-hover); text-decoration: underline; }

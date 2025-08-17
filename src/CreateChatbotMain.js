@@ -1,29 +1,25 @@
 // ─────────────────────────────────────────────────────────────
 // Firebase + OpenAI Responses + File Search (Vector Store)
-// 저장 버튼 → Firestore 저장/수정 되도록 수정
+// 저장 버튼 → Firestore 저장/수정
+// + 저장된 PDF/미저장(선택만 한) PDF 모두 목록 노출 & 개별 삭제
+// + 미저장 PDF도 클릭(Blob URL)으로 미리보기
+// + 저장 직후 중복 렌더링 방지(선택본 초기화 + 파일명 기준 중복 숨김)
 // ─────────────────────────────────────────────────────────────
 
-// ===== Firebase =====
 import { initializeApp } from "firebase/app";
+import { getAuth, onAuthStateChanged } from "firebase/auth";
 import {
-  getAuth,
-  onAuthStateChanged
-} from "firebase/auth";
-import {
-  getFirestore,
-  collection,
-  addDoc,
-  updateDoc,
-  getDoc,
-  doc,
-  serverTimestamp
+  getFirestore, collection, addDoc, updateDoc, getDoc, doc, serverTimestamp
 } from "firebase/firestore";
+import {
+  getStorage, ref as storageRef, uploadBytes, getDownloadURL, deleteObject
+} from "firebase/storage";
 import { firebaseConfig } from "../firebaseConfig.js";
 
-// Firebase init
 const appFB = initializeApp(firebaseConfig);
 const auth = getAuth(appFB);
 const db = getFirestore(appFB);
+const storage = getStorage(appFB);
 let currentUser = null;
 onAuthStateChanged(auth, (u) => { currentUser = u || null; });
 
@@ -33,7 +29,14 @@ const OPENAI_BASE = "https://api.openai.com/v1";
 
 let vectorStoreId = null;
 let isRagReady = false;
+
+// 사용자가 방금 선택(미저장)한 파일들
 let selectedFiles = [];
+// 미저장 파일용 Blob URL 관리
+let selectedFileObjectUrls = [];
+
+// 편집 모드에서 불러온 "저장된" 파일들 (Firestore 보관본)
+let savedRagFiles = []; // [{name,url,path}]
 
 // 업로드/재첨부 상태(중복 인덱싱 방지)
 const uploadedByFingerprint = new Map();
@@ -69,7 +72,7 @@ function setRagStatus(state, text) {
   el.querySelector(".text").textContent = text;
 }
 
-// [RAG] Vector Store 생성
+// [RAG] Vector Store
 async function ensureVectorStore() {
   if (vectorStoreId) return vectorStoreId;
   const data = await openaiFetch("/vector_stores", {
@@ -79,8 +82,6 @@ async function ensureVectorStore() {
   vectorStoreId = data.id;
   return vectorStoreId;
 }
-
-// [RAG] 파일 업로드/연결/인덱싱
 async function uploadFileToOpenAI(file) {
   const form = new FormData();
   form.append("file", file);
@@ -101,7 +102,7 @@ async function waitIndexed(vsId, fileId, { timeoutMs = 180000, intervalMs = 2000
   }
 }
 
-// ★ FEW-SHOT 파서 (다양한 구분자/Q:A 형식 지원)
+// FEW-SHOT
 function parseFewShot(raw) {
   const text = (raw || "").trim();
   if (!text) return null;
@@ -117,7 +118,6 @@ function parseFewShot(raw) {
       if (left) return { user: left, assistant: right };
     }
   }
-
   const parts = text.split(/\n\s*\n/);
   if (parts.length >= 2) return { user: parts[0].trim(), assistant: parts.slice(1).join("\n").trim() };
   return { user: text, assistant: "" };
@@ -129,8 +129,6 @@ function isUsefulFewShot(ex) {
   if (a && a.length < 8) return false;
   return true;
 }
-
-// 문자열 프롬프트 빌더
 function buildInputString({ systemPrompt, fewShots, userMessage }) {
   let s = "";
   if (systemPrompt?.trim()) s += `System:\n${systemPrompt.trim()}\n\n`;
@@ -146,13 +144,13 @@ function buildInputString({ systemPrompt, fewShots, userMessage }) {
   return s;
 }
 
-// [Chat] Responses + (옵션) file_search
+// Chat
 async function askWithFileSearch({
   model = "gpt-4o-mini",
   systemPrompt,
   fewShots = [],
   userMessage,
-  vsId, // null이면 툴 미사용
+  vsId,
   selfConsistency = false,
   samples = 3,
   temperature = 0.7
@@ -171,16 +169,10 @@ async function askWithFileSearch({
 
   const resp = await openaiFetch("/responses", {
     method: "POST",
-    body: {
-      model,
-      input,
-      ...(tools ? { tools } : {}),
-      temperature
-    }
+    body: { model, input, ...(tools ? { tools } : {}), temperature }
   });
   return extractAssistantText(resp) || "[빈 응답]";
 }
-
 function extractAssistantText(resp) {
   if (resp?.output_text && resp.output_text.trim()) return resp.output_text.trim();
   let parts = [];
@@ -200,15 +192,12 @@ function extractAssistantText(resp) {
   return parts.join("\n").trim();
 }
 
-// ─────────────────────────────────────────────────────────────
-// Firestore: 저장/수정/로드
-// ─────────────────────────────────────────────────────────────
+// Firestore 저장/로드
 async function saveChatbotToFirestore(payload) {
   const idField = document.getElementById("chatbotId");
   const existingId = (idField.value || "").trim();
 
   if (existingId) {
-    // update
     await updateDoc(doc(db, "chatbots", existingId), {
       ...payload,
       updatedAt: serverTimestamp(),
@@ -217,7 +206,6 @@ async function saveChatbotToFirestore(payload) {
     });
     return existingId;
   } else {
-    // create
     const ref = await addDoc(collection(db, "chatbots"), {
       ...payload,
       createdAt: serverTimestamp(),
@@ -226,34 +214,168 @@ async function saveChatbotToFirestore(payload) {
       ownerEmail: currentUser?.email || null
     });
     idField.value = ref.id;
-    // URL에 ?id=... 붙여서 새로고침/복귀 시 편하게
     const url = new URL(location.href);
     url.searchParams.set("id", ref.id);
     history.replaceState(null, "", url.toString());
     return ref.id;
   }
 }
-
 async function loadChatbotFromFirestore(id) {
   const snap = await getDoc(doc(db, "chatbots", id));
   if (!snap.exists()) throw new Error("해당 챗봇 문서가 없습니다.");
   return snap.data();
 }
 
-function populateFormFromDoc(data) {
+// 유틸
+function escapeHtml(str){return String(str).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");}
+function guessFilenameFromUrl(url,fallback="document.pdf"){
+  try{const c=url.split("?")[0];const last=c.substring(c.lastIndexOf("/")+1)||fallback;return decodeURIComponent(last);}catch{return fallback;}
+}
+async function fetchFileAsBlob(url){const r=await fetch(url);if(!r.ok)throw new Error(`파일 다운로드 실패: ${r.status}`);return await r.blob();}
+
+// dedupe helpers
+const fileKey = (m)=> String(m?.path || m?.url || m?.name || "").toLowerCase();
+const nameKey = (f)=> String(f?.name || "").toLowerCase();
+function dedupeMetas(metas){
+  const seen = new Set();
+  const out = [];
+  for (const m of metas){
+    const k = fileKey(m);
+    if (k && !seen.has(k)){ seen.add(k); out.push(m); }
+  }
+  return out;
+}
+
+// ── Blob URL 관리 ──
+function clearSelectedFileObjectUrls(){
+  selectedFileObjectUrls.forEach(u => { try{ URL.revokeObjectURL(u); }catch{} });
+  selectedFileObjectUrls = [];
+}
+
+// ====== 파일 목록 렌더링(저장된 + 미저장) & 삭제 ======
+function renderFileLists() {
+  const wrap = document.getElementById("ragFileLink");
+  wrap.innerHTML = "";
+
+  // 저장된 파일들
+  (savedRagFiles || []).forEach((f, idx) => {
+    const row = document.createElement("div");
+    row.style.display = "flex";
+    row.style.gap = "8px";
+    row.style.alignItems = "center";
+    row.style.margin = "4px 0";
+
+    const a = document.createElement("a");
+    a.href = f.url || "#";
+    a.target = "_blank";
+    a.rel = "noopener";
+    a.className = "rag-link";
+    a.textContent = f.name || `파일 ${idx+1}`;
+    row.appendChild(a);
+
+    const del = document.createElement("button");
+    del.type = "button";
+    del.textContent = "삭제";
+    Object.assign(del.style, { padding:"4px 8px", border:"none", borderRadius:"6px", background:"#ef4444", color:"#fff", cursor:"pointer" });
+    del.addEventListener("click", () => deleteSavedFileAt(idx));
+    row.appendChild(del);
+
+    wrap.appendChild(row);
+  });
+
+  // 🔧 저장본과 "파일명 기준"으로 중복되는 선택본은 숨김
+  const savedNames = new Set((savedRagFiles || []).map(m => String(m?.name || "").toLowerCase()));
+
+  // 미저장(방금 선택한) 파일들
+  clearSelectedFileObjectUrls();
+  (selectedFiles || []).forEach((f, idx) => {
+    if (savedNames.has(nameKey(f))) return; // ← 중복 숨김
+    const row = document.createElement("div");
+    row.style.display = "flex";
+    row.style.gap = "8px";
+    row.style.alignItems = "center";
+    row.style.margin = "4px 0";
+
+    const blobUrl = URL.createObjectURL(f);
+    selectedFileObjectUrls.push(blobUrl);
+
+    const a = document.createElement("a");
+    a.href = blobUrl;
+    a.target = "_blank";
+    a.rel = "noopener";
+    a.textContent = f.name;
+    row.appendChild(a);
+
+    const del = document.createElement("button");
+    del.type = "button";
+    del.textContent = "삭제";
+    Object.assign(del.style, { padding:"4px 8px", border:"none", borderRadius:"6px", background:"#ef4444", color:"#fff", cursor:"pointer" });
+    del.addEventListener("click", () => removeSelectedFileAt(idx));
+    row.appendChild(del);
+
+    wrap.appendChild(row);
+  });
+}
+
+async function deleteSavedFileAt(idx) {
+  const id = (document.getElementById("chatbotId").value || "").trim();
+  if (!savedRagFiles[idx]) return;
+  const file = savedRagFiles[idx];
+
+  if (!confirm(`'${file.name}' 파일을 삭제할까요?`)) return;
+  try {
+    if (file.path) {
+      try { await deleteObject(storageRef(storage, file.path)); }
+      catch (e) { console.warn("Storage 파일 삭제 실패/스킵:", e?.message); }
+    }
+
+    // Firestore 및 로컬 상태 갱신
+    savedRagFiles = savedRagFiles.filter((_, i) => i !== idx);
+
+    const legacyName = savedRagFiles.length ? savedRagFiles.map(f => f.name).join(", ") : "";
+    const legacyUrl  = savedRagFiles[0]?.url  || "";
+    const legacyPath = savedRagFiles[0]?.path || "";
+
+    if (id) {
+      await updateDoc(doc(db, "chatbots", id), {
+        ragFiles: savedRagFiles,
+        ragFileName: legacyName,
+        ragFileUrl: legacyUrl,
+        ragFilePath: legacyPath,
+        updatedAt: serverTimestamp()
+      });
+    }
+
+    renderFileLists();
+    setRagStatus(null, selectedFiles.length ? `선택된 파일 ${selectedFiles.length}개 (테스트하기로 준비)` : "RAG 준비 전");
+    showToast("🗑️ 파일을 삭제했습니다.");
+  } catch (err) {
+    console.error(err);
+    showToast("❌ 파일 삭제 실패: " + err.message, 2200);
+  }
+}
+
+// 미저장 파일 배열에서 하나 제거 (input.files도 동기화)
+function removeSelectedFileAt(idx) {
+  const input = document.getElementById("ragFile");
+  const dt = new DataTransfer();
+  selectedFiles.forEach((f, i) => { if (i !== idx) dt.items.add(f); });
+  if (input) input.files = dt.files;
+  selectedFiles = Array.from(dt.files);
+
+  renderFileLists();
+  setRagStatus(null, selectedFiles.length ? `선택된 파일 ${selectedFiles.length}개 (테스트하기로 준비)` : "RAG 준비 전");
+}
+
+// 편집모드 채우기 (+ 저장된 PDF들을 가능한 한 File로 복구)
+async function populateFormFromDoc(data) {
   document.getElementById("subject").value = data.subject || "";
   document.getElementById("name").value = data.name || "";
   document.getElementById("description").value = data.description || "";
 
-  // 모델
-  if (data.modelSelectValue) {
-    document.getElementById("modelSelect").value = data.modelSelectValue;
-  }
-  if (data.customModelValue) {
-    document.getElementById("customModelId").value = data.customModelValue;
-  }
+  if (data.modelSelectValue) document.getElementById("modelSelect").value = data.modelSelectValue;
+  if (data.customModelValue) document.getElementById("customModelId").value = data.customModelValue;
 
-  // 토글
   document.getElementById("ragToggle").checked = !!data.useRag;
   document.getElementById("ragUpload").classList.toggle("hidden", !data.useRag);
   document.getElementById("fewShotToggle").checked = !!data.useFewShot;
@@ -294,6 +416,34 @@ function populateFormFromDoc(data) {
     block.appendChild(delBtn);
     examplesArea.appendChild(block);
   }
+
+  // 저장된 파일 메타 (배열 우선, 없으면 단일 필드 호환)
+  savedRagFiles = Array.isArray(data.ragFiles) && data.ragFiles.length
+    ? data.ragFiles
+    : ((data.ragFileUrl || data.ragFileName) ? [{
+        name: data.ragFileName || guessFilenameFromUrl(data.ragFileUrl),
+        url:  data.ragFileUrl  || "",
+        path: data.ragFilePath || ""
+      }] : []);
+
+  renderFileLists();
+
+  // 테스트 편의용: 가능한 파일은 File로 복구
+  selectedFiles = [];
+  for (const f of savedRagFiles) {
+    if (!f.url) continue;
+    try {
+      const blob = await fetchFileAsBlob(f.url);
+      const file = new File([blob], f.name, { type: blob.type || "application/pdf" });
+      selectedFiles.push(file);
+    } catch (e) {
+      console.warn("저장된 파일 로드 실패:", f.name, e?.message);
+    }
+  }
+  if (savedRagFiles.length) {
+    setRagStatus("busy", `선택된 파일 ${selectedFiles.length || savedRagFiles.length}개 (테스트하기로 준비)`);
+    document.getElementById("sendMessage").disabled = true;
+  }
 }
 
 function getSelectedModelId() {
@@ -309,14 +459,97 @@ function getSelectedModelId() {
   return sel || "gpt-4o-mini";
 }
 
-// ─────────────────────────────────────────────────────────────
-// UI 초기화
-// ─────────────────────────────────────────────────────────────
+// 초기화
+function resetAllUI() {
+  const form = document.getElementById("chatbotForm");
+  if (form) form.reset();
+
+  const idField = document.getElementById("chatbotId");
+  if (idField) idField.value = "";
+
+  document.getElementById("ragUpload")?.classList.add("hidden");
+  document.getElementById("fewShotContainer")?.classList.add("hidden");
+
+  const examplesArea = document.getElementById("examplesArea");
+  if (examplesArea) {
+    examplesArea.innerHTML = "";
+    const block = document.createElement("div");
+    block.className = "example-block";
+    const textarea = document.createElement("textarea");
+    textarea.className = "example-input";
+    textarea.placeholder = "예) 피타고라스 정리 알려줘 → 직각삼각형에서...";
+    const delBtn = document.createElement("button");
+    delBtn.textContent = "✕";
+    delBtn.type = "button";
+    delBtn.className = "delete-example";
+    delBtn.addEventListener("click", () => block.remove());
+    block.appendChild(textarea);
+    block.appendChild(delBtn);
+    examplesArea.appendChild(block);
+  }
+
+  const ragStatusEl = document.getElementById("ragStatus");
+  if (ragStatusEl) {
+    ragStatusEl.classList.remove("ready", "busy", "error");
+    ragStatusEl.querySelector(".text").textContent = "RAG 준비 전";
+  }
+
+  const chatWindow = document.getElementById("chatWindow");
+  if (chatWindow) chatWindow.innerHTML = "";
+  const sendBtn = document.getElementById("sendMessage");
+  if (sendBtn) sendBtn.disabled = false;
+
+  clearSelectedFileObjectUrls();
+  selectedFiles = [];
+  uploadedByFingerprint.clear();
+  attachedFileIds.clear();
+  vectorStoreId = null;
+  isRagReady = false;
+  savedRagFiles = [];
+}
+
+// Firestore 문서 채우기
+async function hydrateFromFirestoreIfNeeded() {
+  const params = new URLSearchParams(location.search);
+  const urlId = params.get("id");
+  if (urlId) {
+    document.getElementById("chatbotId").value = urlId;
+    const data = await loadChatbotFromFirestore(urlId);
+    await populateFormFromDoc(data);
+    showToast("✏️ 편집 모드로 불러왔습니다.");
+  }
+}
+
+// Storage 업로드(저장용)
+function safeName(name) { return String(name).replace(/[^\w.\-가-힣 ]+/g, "_"); }
+async function uploadRagFilesToStorage(files) {
+  const uid = currentUser?.uid || "anon";
+  const ts = Date.now();
+  const metas = [];
+  for (let i = 0; i < files.length; i++) {
+    const f = files[i];
+    const path = `chatbots/${uid}/rag/${ts}_${i}_${safeName(f.name)}`;
+    const ref = storageRef(storage, path);
+    await uploadBytes(ref, f);
+    const url = await getDownloadURL(ref);
+    metas.push({ name: f.name, path, url });
+  }
+  return metas;
+}
+
+// UI 초기화 + 이벤트
 window.addEventListener("DOMContentLoaded", async () => {
+  resetAllUI();
+
+  const params = new URLSearchParams(location.search);
+  const allowRestore = params.get("restore") === "1";
+  if (allowRestore) restoreDraftFromStorage();
+  else localStorage.removeItem("create_chatbot_draft");
+
+  await hydrateFromFirestoreIfNeeded();
+
   const input = document.getElementById("userMessage");
   const sendBtn = document.getElementById("sendMessage");
-
-  // 기본: RAG 꺼짐 → 바로 대화 가능
   sendBtn.disabled = false;
 
   sendBtn.addEventListener("click", () => onSendMessage(input));
@@ -328,7 +561,6 @@ window.addEventListener("DOMContentLoaded", async () => {
   const ragUpload = document.getElementById("ragUpload");
   const ragStatusEl = document.getElementById("ragStatus");
 
-  // ▼ 모델 선택 핸들러
   const modelSelect = document.getElementById("modelSelect");
   const customModelId = document.getElementById("customModelId");
   const syncCustomVisibility = () => {
@@ -337,7 +569,6 @@ window.addEventListener("DOMContentLoaded", async () => {
   };
   modelSelect.addEventListener("change", syncCustomVisibility);
   syncCustomVisibility();
-  // ▲ 모델 선택 핸들러 끝
 
   // RAG 토글
   ragToggle.addEventListener("change", () => {
@@ -348,14 +579,16 @@ window.addEventListener("DOMContentLoaded", async () => {
     } else {
       ragUpload.classList.add("hidden");
       selectedFiles = [];
+      clearSelectedFileObjectUrls();
       isRagReady = attachedFileIds.size > 0;
       ragStatusEl.classList.remove("ready", "busy", "error");
       ragStatusEl.querySelector(".text").textContent = "RAG 꺼짐";
       sendBtn.disabled = false;
     }
+    renderFileLists();
   });
 
-  // 파일 선택(여러 개)
+  // 파일 선택(미저장)
   const ragFile = document.getElementById("ragFile");
   ragFile.addEventListener("change", (e) => {
     selectedFiles = Array.from(e.target.files || []);
@@ -364,9 +597,10 @@ window.addEventListener("DOMContentLoaded", async () => {
       setRagStatus("busy", `선택된 파일 ${selectedFiles.length}개 (테스트하기로 준비)`);
       sendBtn.disabled = true;
     }
+    renderFileLists(); // 미저장 파일도 즉시 링크/삭제 노출(중복은 숨김)
   });
 
-  // few-shot 토글/추가 버튼
+  // few-shot 토글/추가
   const fewShotToggle = document.getElementById("fewShotToggle");
   const fewShotContainer = document.getElementById("fewShotContainer");
   fewShotToggle.addEventListener("change", () => {
@@ -388,13 +622,38 @@ window.addEventListener("DOMContentLoaded", async () => {
     document.getElementById("examplesArea").appendChild(block);
   });
 
-  // ===== Firestore 저장 (수정: 실제 저장/수정) =====
+  // 저장하기
   document.getElementById("chatbotForm").addEventListener("submit", async (e) => {
     e.preventDefault();
     const payload = collectFormData();
     try {
+      const ragOn = document.getElementById("ragToggle").checked;
+      const picked = Array.from((document.getElementById("ragFile")?.files) || []);
+      let metas = [];
+      if (ragOn && picked.length) {
+        showToast("PDF 업로드 중…");
+        metas = await uploadRagFilesToStorage(picked);
+      }
+
+      // 기존 저장본 + 신규 업로드본 병합 + 중복 제거
+      const combined = dedupeMetas([...(savedRagFiles || []), ...metas]);
+      payload.ragFiles = combined;
+      payload.ragFileName = combined.length ? combined.map(m => m.name).join(", ") : "";
+      payload.ragFileUrl  = combined[0]?.url  || "";
+      payload.ragFilePath = combined[0]?.path || "";
+
       const id = await saveChatbotToFirestore(payload);
-      // 임시 저장도 유지(초안 복구용)
+
+      // ✅ 저장 후 선택본/파일 입력/Blob URL 초기화 → 중복 렌더링 방지
+      clearSelectedFileObjectUrls();
+      selectedFiles = [];
+      const fileInput = document.getElementById("ragFile");
+      if (fileInput) fileInput.value = "";
+
+      // 메모리/UI 동기화(저장본만 렌더)
+      savedRagFiles = combined;
+      renderFileLists();
+
       localStorage.setItem("create_chatbot_draft", JSON.stringify({ ...payload, savedAt: new Date().toISOString(), id }));
       showToast("✅ 저장 완료");
     } catch (err) {
@@ -403,36 +662,20 @@ window.addEventListener("DOMContentLoaded", async () => {
     }
   });
 
-  // 임시저장 복원 + (선택) Firestore 문서 로드(편집모드)
-  try {
-    restoreDraftFromStorage();
-    // URL ?id=... 또는 hidden에 id가 있으면 Firestore에서 우선 로드
-    const params = new URLSearchParams(location.search);
-    const urlId = params.get("id");
-    const hiddenId = document.getElementById("chatbotId").value;
-    const targetId = urlId || hiddenId;
-    if (targetId) {
-      document.getElementById("chatbotId").value = targetId;
-      const data = await loadChatbotFromFirestore(targetId);
-      populateFormFromDoc(data);
-      showToast("✏️ 편집 모드로 불러왔습니다.");
-    }
-    syncCustomVisibility();
-  } catch (e) {
-    console.warn(e);
-  }
-
   // 테스트하기
   document.getElementById("testButton").addEventListener("click", async () => {
     try {
-      if (!ragToggle.checked) {
+      const ragOn = document.getElementById("ragToggle").checked;
+      const sendBtnLocal = document.getElementById("sendMessage");
+
+      if (!ragOn) {
         appendMessage("bot", "ℹ️ RAG가 꺼져 있어 인덱싱이 필요 없습니다. 바로 질문을 보내세요.");
         return;
       }
       if (!selectedFiles.length && attachedFileIds.size > 0) {
         isRagReady = true;
         setRagStatus("ready", `RAG 준비 완료 (파일 ${attachedFileIds.size}개)`);
-        sendBtn.disabled = false;
+        sendBtnLocal.disabled = false;
         appendMessage("bot", "✅ 이미 업로드·인덱싱된 파일이 있어 바로 사용할 수 있습니다.");
         return;
       }
@@ -472,7 +715,7 @@ window.addEventListener("DOMContentLoaded", async () => {
       isRagReady = attachedFileIds.size > 0;
       if (isRagReady) {
         setRagStatus("ready", `RAG 준비 완료 (파일 ${attachedFileIds.size}개)`);
-        sendBtn.disabled = false;
+        document.getElementById("sendMessage").disabled = false;
         appendMessage("bot", "🎉 준비 완료! 질문을 보내면 업로드한 문서로 답합니다.");
       } else {
         setRagStatus("error", "파일 준비 실패");
@@ -481,12 +724,23 @@ window.addEventListener("DOMContentLoaded", async () => {
       isRagReady = false;
       setRagStatus("error", "오류 발생");
       appendMessage("bot", "❌ RAG 준비 실패: " + err.message);
-      if (ragToggle.checked) document.getElementById("sendMessage").disabled = true;
+      if (document.getElementById("ragToggle").checked) {
+        document.getElementById("sendMessage").disabled = true;
+      }
+    }
+  });
+
+  // 뒤로가기(bfcache) 복귀 초기화
+  window.addEventListener("pageshow", async (ev) => {
+    if (ev.persisted) {
+      resetAllUI();
+      localStorage.removeItem("create_chatbot_draft");
+      await hydrateFromFirestoreIfNeeded();
     }
   });
 });
 
-// 메시지 전송
+// 메시지 전송/출력/폼 수집 — 기존 문법 유지
 async function onSendMessage(inputEl) {
   const msg = inputEl.value.trim();
   if (!msg) return;
@@ -500,7 +754,6 @@ async function onSendMessage(inputEl) {
     return;
   }
 
-  // few-shot 수집(짧은/무의미한 예시는 제외)
   const useFewShot = document.getElementById("fewShotToggle").checked;
   const fewShots = [];
   if (useFewShot) {
@@ -517,7 +770,7 @@ async function onSendMessage(inputEl) {
 
   try {
     const text = await askWithFileSearch({
-      model: modelId,                 // ← 사용자 선택 모델 적용
+      model: modelId,
       systemPrompt,
       fewShots,
       userMessage: msg,
@@ -534,8 +787,6 @@ async function onSendMessage(inputEl) {
     thinking.innerHTML = "❌ 응답 실패: " + err.message;
   }
 }
-
-// 출력 유틸 및 도우미들
 function appendMessage(role, content = "") {
   const msg = document.createElement("div");
   msg.className = `chat-message ${role}`;
@@ -561,7 +812,6 @@ function animateTypingWithMath(element, html, delay = 18) {
     chatWindow.scrollTop = chatWindow.scrollHeight;
   }, delay);
 }
-
 function collectFormData() {
   const subject = document.getElementById("subject").value.trim();
   const name = document.getElementById("name").value.trim();
@@ -592,7 +842,6 @@ function restoreDraftFromStorage() {
   if (!raw) return;
   const data = JSON.parse(raw);
 
-  // URL에 id가 없고, 초안에 id가 있으면 hidden에 채워 넣기
   if (data.id && !new URLSearchParams(location.search).get("id")) {
     document.getElementById("chatbotId").value = data.id;
   }
@@ -605,13 +854,8 @@ function restoreDraftFromStorage() {
   document.getElementById("fewShotToggle").checked = !!data.useFewShot;
   document.getElementById("fewShotContainer").classList.toggle("hidden", !data.useFewShot);
 
-  // 모델 값 복원
-  if (data.modelSelectValue) {
-    document.getElementById("modelSelect").value = data.modelSelectValue;
-  }
-  if (data.customModelValue) {
-    document.getElementById("customModelId").value = data.customModelValue;
-  }
+  if (data.modelSelectValue) document.getElementById("modelSelect").value = data.modelSelectValue;
+  if (data.customModelValue) document.getElementById("customModelId").value = data.customModelValue;
 
   const examplesArea = document.getElementById("examplesArea");
   examplesArea.innerHTML = "";

@@ -94,6 +94,25 @@ h2 {
   color: #333;
 }
 
+/* ▼ 스택(세로) 표시용 */
+.stack-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-top: 6px;
+}
+.stack-list > div {
+  line-height: 1.5;
+}
+.stack-list a {
+  color: #5a2ca0;
+  text-decoration: underline;
+  cursor: pointer;
+}
+.stack-list a:hover {
+  color: #7a42c5;
+}
+
 textarea.editable {
   width: 100%;
   border-radius: 6px;
@@ -111,7 +130,8 @@ textarea.editable {
 
 .edit-btn,
 .save-btn,
-.delete-btn {
+.delete-btn,
+.create-btn {
   padding: 6px 10px;
   font-size: 14px;
   border: none;
@@ -132,6 +152,15 @@ textarea.editable {
 .delete-btn {
   background-color: #ff4d4d;
   color: white;
+}
+
+/* ▼ 생성 버튼 복구 */
+.create-btn {
+  background-color: #6b5bff;
+  color: #fff;
+}
+.create-btn:hover {
+  background-color: #5548e6;
 }
 
 button.hidden,

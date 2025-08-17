@@ -24,19 +24,19 @@
     <!-- 챗봇 제작 폼 -->
     <div class="form-panel">
       <h2>챗봇 제작</h2>
-      <form id="chatbotForm">
+      <form id="chatbotForm" autocomplete="off">
         <input type="hidden" id="chatbotId" />
 
         <label for="subject">교과</label>
-        <input type="text" id="subject" name="subject" required />
+        <input type="text" id="subject" name="subject" required autocomplete="off" />
 
         <label for="name">이름</label>
-        <input type="text" id="name" name="name" required />
+        <input type="text" id="name" name="name" required autocomplete="off" />
 
         <!-- ▼ 모델 선택 추가 -->
         <label for="modelSelect">모델 선택</label>
         <div class="model-row">
-          <select id="modelSelect" name="model">
+          <select id="modelSelect" name="model" autocomplete="off">
             <option value="gpt-4o-mini" selected>gpt-4o-mini (기본)</option>
             <option value="gpt-4o">gpt-4o</option>
             <option value="gpt-4.1-mini">gpt-4.1-mini</option>
@@ -45,12 +45,12 @@
             <option value="o3-mini">o3-mini (reasoning)</option>
             <option value="custom">직접 입력…</option>
           </select>
-          <input type="text" id="customModelId" class="hidden" placeholder="커스텀 모델 ID를 입력하세요" />
+          <input type="text" id="customModelId" class="hidden" placeholder="커스텀 모델 ID를 입력하세요" autocomplete="off" />
         </div>
         <!-- ▲ 모델 선택 추가 끝 -->
 
         <label for="description">설명(시스템 프롬프트)</label>
-        <textarea id="description" name="description" placeholder="예) 업로드 문서를 근거로만 답하세요. 근거 없으면 모른다고 답하세요." required></textarea>
+        <textarea id="description" name="description" placeholder="예) 업로드 문서를 근거로만 답하세요. 근거 없으면 모른다고 답하세요." required autocomplete="off"></textarea>
 
         <div class="status" id="ragStatus"><span class="dot"></span><span class="text">RAG 준비 전</span></div>
         <br /><br />
@@ -60,6 +60,8 @@
           <label for="ragFile">PDF 업로드</label>
           <input type="file" id="ragFile" accept=".pdf" multiple />
           <div id="ragFileLink"></div>
+          <!-- ▼ 업로드한 PDF 삭제 버튼 -->
+          <button type="button" id="deleteRagFileBtn" class="file-del-btn hidden">업로드 파일 삭제</button>
         </div>
 
         <label><input type="checkbox" id="fewShotToggle" /> few-shot</label>
@@ -92,7 +94,7 @@
           📎
           <input type="file" id="imageInput" accept="image/*" hidden />
         </label>
-        <input type="text" id="userMessage" placeholder="메시지를 입력하세요..." />
+        <input type="text" id="userMessage" placeholder="메시지를 입력하세요..." autocomplete="off" />
         <button id="sendMessage" type="button">➤</button>
       </div>
     </div>

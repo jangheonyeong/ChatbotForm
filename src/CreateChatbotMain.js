@@ -16,6 +16,17 @@ import {
 } from "firebase/storage";
 import { firebaseConfig } from "../firebaseConfig.js";
 
+// ===== marked 전역 옵션: 줄바꿈/표/리스트 등 GFM 스타일 활성화 =====
+if (window.marked) {
+  window.marked.setOptions({
+    gfm: true,
+    breaks: true,         // 단일 개행을 <br>로 반영
+    headerIds: false,
+    mangle: false,
+    smartypants: true
+  });
+}
+
 const appFB = initializeApp(firebaseConfig);
 const auth = getAuth(appFB);
 const db = getFirestore(appFB);
@@ -190,6 +201,83 @@ function extractAssistantText(resp) {
     }
   }
   return parts.join("\n").trim();
+}
+
+// ---------- Markdown & Math helpers ----------
+function sanitizeHTML(html) {
+  try {
+    const parser = new DOMParser();
+    const doc = parser.parseFromString(html, "text/html");
+
+    // 위험 태그 제거
+    doc.querySelectorAll("script, style, iframe, object, embed").forEach(el => el.remove());
+
+    // 위험 속성 제거
+    const all = doc.querySelectorAll("*");
+    all.forEach(el => {
+      [...el.attributes].forEach(attr => {
+        const n = attr.name.toLowerCase();
+        const v = String(attr.value || "");
+        if (n.startsWith("on")) el.removeAttribute(attr.name);
+        if ((n === "href" || n === "src") && /^javascript:/i.test(v)) el.removeAttribute(attr.name);
+      });
+    });
+    return doc.body.innerHTML;
+  } catch {
+    return html;
+  }
+}
+function renderMarkdown(mdText) {
+  const raw = String(mdText || "");
+  const html = (window.marked ? window.marked.parse(raw) : raw);
+  return sanitizeHTML(html);
+}
+function enhanceLinks(container) {
+  container.querySelectorAll("a[href]").forEach(a => {
+    a.setAttribute("target", "_blank");
+    a.setAttribute("rel", "noopener noreferrer");
+  });
+}
+
+/**
+ * 안전한 "타이핑" 느낌: HTML을 노드 단위로 순차적으로 붙인다.
+ * - 마크다운 파싱 후 구조를 보존하므로 수식/코드/리스트가 깨지지 않음
+ * - 완료 후 MathJax 렌더링
+ */
+function animateTypingWithMath(element, html, opts = {}) {
+  const nodeDelay = opts.nodeDelay ?? 24;
+  const blockDelay = opts.blockDelay ?? 140;
+
+  const tmp = document.createElement("div");
+  tmp.innerHTML = html; // 이미 sanitize 됨
+
+  element.innerHTML = "";
+  const chatWindow = document.getElementById("chatWindow");
+
+  const step = () => {
+    const node = tmp.firstChild;
+    if (!node) {
+      try {
+        enhanceLinks(element);
+        if (window.MathJax?.typesetPromise) {
+          window.MathJax.typesetPromise([element]);
+        }
+      } catch {}
+      return;
+    }
+    element.appendChild(node);
+
+    // 블록 요소는 조금 더 느리게
+    const isBlock = node.nodeType === Node.ELEMENT_NODE &&
+      /^(P|PRE|UL|OL|BLOCKQUOTE|TABLE|DIV)$/i.test(node.nodeName);
+
+    // 스크롤 고정
+    chatWindow.scrollTop = chatWindow.scrollHeight;
+
+    setTimeout(step, isBlock ? blockDelay : nodeDelay);
+  };
+
+  step();
 }
 
 // Firestore 저장/로드
@@ -669,19 +757,19 @@ window.addEventListener("DOMContentLoaded", async () => {
       const sendBtnLocal = document.getElementById("sendMessage");
 
       if (!ragOn) {
-        appendMessage("bot", "ℹ️ RAG가 꺼져 있어 인덱싱이 필요 없습니다. 바로 질문을 보내세요.");
+        appendMessage("bot", "<div class='prose'>ℹ️ <strong>RAG</strong>가 꺼져 있어 인덱싱이 필요 없습니다. 바로 질문을 보내세요.</div>");
         return;
       }
       if (!selectedFiles.length && attachedFileIds.size > 0) {
         isRagReady = true;
         setRagStatus("ready", `RAG 준비 완료 (파일 ${attachedFileIds.size}개)`);
         sendBtnLocal.disabled = false;
-        appendMessage("bot", "✅ 이미 업로드·인덱싱된 파일이 있어 바로 사용할 수 있습니다.");
+        appendMessage("bot", "<div class='prose'>✅ 이미 업로드·인덱싱된 파일이 있어 바로 사용할 수 있습니다.</div>");
         return;
       }
       if (!selectedFiles.length) {
         setRagStatus("error", "PDF를 먼저 선택하세요.");
-        appendMessage("bot", "⚠️ PDF를 먼저 선택해주세요.");
+        appendMessage("bot", "<div class='prose'>⚠️ PDF를 먼저 선택해주세요.</div>");
         return;
       }
 
@@ -693,37 +781,37 @@ window.addEventListener("DOMContentLoaded", async () => {
         if (uploadedByFingerprint.has(fp)) {
           const fileId = uploadedByFingerprint.get(fp);
           if (attachedFileIds.has(fileId)) {
-            appendMessage("bot", `♻️ 이미 준비된 파일: ${file.name} (업로드/인덱싱 생략)`);
+            appendMessage("bot", `<div class='prose'>♻️ 이미 준비된 파일: <code>${escapeHtml(file.name)}</code> (업로드/인덱싱 생략)</div>`);
             continue;
           }
-          appendMessage("bot", `🔗 재연결: ${file.name}`);
+          appendMessage("bot", `<div class='prose'>🔗 재연결: <code>${escapeHtml(file.name)}</code></div>`);
           await attachToVS(vsId, fileId);
           await waitIndexed(vsId, fileId);
           attachedFileIds.add(fileId);
-          appendMessage("bot", `✅ 인덱싱 완료: ${file.name}`);
+          appendMessage("bot", `<div class='prose'>✅ 인덱싱 완료: <code>${escapeHtml(file.name)}</code></div>`);
           continue;
         }
-        appendMessage("bot", `📚 업로드: ${file.name}`);
+        appendMessage("bot", `<div class='prose'>📚 업로드: <code>${escapeHtml(file.name)}</code></div>`);
         const up = await uploadFileToOpenAI(file);
         uploadedByFingerprint.set(fp, up.id);
         await attachToVS(vsId, up.id);
         await waitIndexed(vsId, up.id);
         attachedFileIds.add(up.id);
-        appendMessage("bot", `✅ 인덱싱 완료: ${file.name}`);
+        appendMessage("bot", `<div class='prose'>✅ 인덱싱 완료: <code>${escapeHtml(file.name)}</code></div>`);
       }
 
       isRagReady = attachedFileIds.size > 0;
       if (isRagReady) {
         setRagStatus("ready", `RAG 준비 완료 (파일 ${attachedFileIds.size}개)`);
         document.getElementById("sendMessage").disabled = false;
-        appendMessage("bot", "🎉 준비 완료! 질문을 보내면 업로드한 문서로 답합니다.");
+        appendMessage("bot", "<div class='prose'>🎉 준비 완료! 질문을 보내면 업로드한 문서로 답합니다.</div>");
       } else {
         setRagStatus("error", "파일 준비 실패");
       }
     } catch (err) {
       isRagReady = false;
       setRagStatus("error", "오류 발생");
-      appendMessage("bot", "❌ RAG 준비 실패: " + err.message);
+      appendMessage("bot", `<div class='prose'>❌ RAG 준비 실패: ${escapeHtml(err.message)}</div>`);
       if (document.getElementById("ragToggle").checked) {
         document.getElementById("sendMessage").disabled = true;
       }
@@ -745,12 +833,12 @@ async function onSendMessage(inputEl) {
   const msg = inputEl.value.trim();
   if (!msg) return;
 
-  appendMessage("user", msg);
+  appendMessage("user", escapeHtml(msg));
   inputEl.value = "";
 
   const useRag = document.getElementById("ragToggle").checked;
   if (useRag && !isRagReady) {
-    appendMessage("bot", "⚠️ RAG 모드에선 인덱싱이 끝나야 합니다. ‘테스트하기’를 눌러 준비를 완료하세요.");
+    appendMessage("bot", "<div class='prose'>⚠️ RAG 모드에선 인덱싱이 끝나야 합니다. ‘테스트하기’를 눌러 준비를 완료하세요.</div>");
     return;
   }
 
@@ -766,7 +854,7 @@ async function onSendMessage(inputEl) {
   const modelId = getSelectedModelId();
   const selfConsistency = document.getElementById("selfConsistency").checked;
   const systemPrompt = document.getElementById("description").value.trim();
-  const thinking = appendMessage("bot", "💬 답변 생성 중...");
+  const thinking = appendMessage("bot", "<div class='prose'>💬 <em>답변 생성 중...</em></div>");
 
   try {
     const text = await askWithFileSearch({
@@ -780,11 +868,11 @@ async function onSendMessage(inputEl) {
       temperature: 0.7
     });
 
-    const html = marked.parse(text);
+    const html = `<div class="prose">${renderMarkdown(text)}</div>`;
     thinking.innerHTML = "";
     animateTypingWithMath(thinking, html);
   } catch (err) {
-    thinking.innerHTML = "❌ 응답 실패: " + err.message;
+    thinking.innerHTML = `<div class='prose'>❌ 응답 실패: ${escapeHtml(err.message)}</div>`;
   }
 }
 function appendMessage(role, content = "") {
@@ -796,22 +884,10 @@ function appendMessage(role, content = "") {
   chatWindow.scrollTop = chatWindow.scrollHeight;
   return msg;
 }
-function animateTypingWithMath(element, html, delay = 18) {
-  const tokens = html.split(/(\s+)/);
-  let i = 0;
-  element.innerHTML = "";
-  const iv = setInterval(() => {
-    if (i >= tokens.length) {
-      clearInterval(iv);
-      MathJax.typesetPromise([element]);
-      return;
-    }
-    element.innerHTML += tokens[i];
-    i++;
-    const chatWindow = document.getElementById("chatWindow");
-    chatWindow.scrollTop = chatWindow.scrollHeight;
-  }, delay);
-}
+
+// (이전 방식 교체) — 안전 노드 단위 애니메이션을 사용하므로 구현을 여기서 유지
+// function animateTypingWithMath(element, html, delay = 18) { ... }  ← 대체됨
+
 function collectFormData() {
   const subject = document.getElementById("subject").value.trim();
   const name = document.getElementById("name").value.trim();

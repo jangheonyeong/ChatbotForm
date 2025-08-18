@@ -1,12 +1,12 @@
-// [src/ChatbotListMain.js]
+// [src/ChatbotListMain.js] — 목록/수정/삭제 최소 버전 + 구/신 스키마 동시 조회
 
 import { initializeApp } from "firebase/app";
 import { getAuth, onAuthStateChanged } from "firebase/auth";
 import {
-  getFirestore, collection, query, where, getDocs, deleteDoc, doc, updateDoc, serverTimestamp
+  getFirestore, collection, query, where, getDocs, deleteDoc, doc
 } from "firebase/firestore";
 import {
-  getStorage, ref as sRef, getBlob, getBytes, deleteObject, getDownloadURL
+  getStorage, ref as sRef, deleteObject, getDownloadURL
 } from "firebase/storage";
 import { firebaseConfig } from "../firebaseConfig.js";
 
@@ -15,59 +15,12 @@ const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
 const db = getFirestore(app);
 const storage = getStorage(app);
+
 const listContainer = document.getElementById("chatbotList");
-
-/* ===== OpenAI (assistants v2) ===== */
-const OPENAI_API_KEY = import.meta.env.VITE_OPENAI_API_KEY || "";
-const OPENAI_BASE = "https://api.openai.com/v1";
-
-async function openaiFetch(path, { method = "GET", headers = {}, body } = {}) {
-  const isForm = body instanceof FormData;
-  const res = await fetch(`${OPENAI_BASE}${path}`, {
-    method,
-    headers: {
-      Authorization: `Bearer ${OPENAI_API_KEY}`,
-      "OpenAI-Beta": "assistants=v2",
-      ...(isForm ? {} : { "Content-Type": "application/json" }),
-      ...headers
-    },
-    body: isForm ? body : body ? JSON.stringify(body) : undefined
-  });
-  if (!res.ok) {
-    let detail = "";
-    try { detail = await res.text(); } catch {}
-    throw new Error(`OpenAI ${res.status}: ${detail || res.statusText}`);
-  }
-  return res.json();
-}
-
-const createVectorStore = (name) =>
-  openaiFetch("/vector_stores", { method: "POST", body: { name } });
-
-const attachToVS = (vsId, fileId) =>
-  openaiFetch(`/vector_stores/${vsId}/files`, { method: "POST", body: { file_id: fileId } });
-
-async function waitIndexed(vsId, fileId, { timeoutMs = 180000, intervalMs = 2000 } = {}) {
-  const start = Date.now();
-  while (true) {
-    const info = await openaiFetch(`/vector_stores/${vsId}/files/${fileId}`);
-    if (info.status === "completed") return info;
-    if (info.status === "failed") throw new Error("파일 인덱싱 실패");
-    if (Date.now() - start > timeoutMs) throw new Error("인덱싱 타임아웃");
-    await new Promise(r => setTimeout(r, intervalMs));
-  }
-}
-
-async function uploadFileToOpenAI(file) {
-  const form = new FormData();
-  form.append("file", file);
-  form.append("purpose", "assistants");
-  return openaiFetch("/files", { method: "POST", body: form });
-}
 
 /* ===== helpers ===== */
 function escapeHtml(str) {
-  return String(str).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+  return String(str ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 }
 function toast(text, ms = 1400) {
   const t = document.createElement("div");
@@ -81,51 +34,7 @@ function toast(text, ms = 1400) {
   document.body.appendChild(t);
   setTimeout(() => t.remove(), ms);
 }
-/* few-shot 포함 */
-function buildInstructions(desc, useRag, useFewShot, examples) {
-  const guard = `한국어로 답하세요. 먼저 요지를 3–6문장으로 제시하세요. 추측/환각 금지.`;
-  const ragGuide = useRag ? `업로드 문서 근거를 우선 사용하세요. 문서와 무관하면 일반 지식으로 답하세요.` : "";
 
-  let few = "";
-  if (useFewShot && Array.isArray(examples) && examples.length) {
-    const header = `[few-shot 예시]
-아래 예시는 답변의 형식/톤/구조를 보여주는 참고용입니다. 그대로 복사하지 말고 현재 질문에 맞게 변형하세요.`;
-    const items = examples.map((ex, i) => `- 예시 ${i + 1}:\n${ex}`).join("\n\n");
-    few = `${header}\n\n${items}`;
-  }
-
-  return [desc || "", guard, ragGuide, few].filter(Boolean).join("\n\n");
-}
-function renderMultiline(text) {
-  return `<div style="white-space:pre-wrap;">${escapeHtml(text || "")}</div>`;
-}
-function setCreateState(btn, label, disabled = true) {
-  btn.textContent = label;
-  btn.disabled = disabled;
-}
-
-/** URL에서 버킷 상대경로 추출 */
-function pathFromUrl(url) {
-  try {
-    const u = new URL(url);
-    const idx = u.pathname.indexOf("/o/");
-    if (idx === -1) return "";
-    const enc = u.pathname.substring(idx + 3);
-    const slash = enc.indexOf("/");
-    const encodedPath = slash === -1 ? enc : enc.substring(0, slash);
-    return decodeURIComponent(encodedPath);
-  } catch {
-    return "";
-  }
-}
-
-/** gs:// 접두사를 버킷 상대경로로 정규화 */
-function toBucketRelativePath(p) {
-  if (!p) return "";
-  return p.startsWith("gs://") ? p.replace(/^gs:\/\/[^/]+\//, "") : p;
-}
-
-/** Firestore 스키마(신/구)에서 RAG 파일 메타를 표준화하여 배열 반환 */
 function normalizeRagFiles(data) {
   if (Array.isArray(data.ragFiles) && data.ragFiles.length) {
     return data.ragFiles.map((m, i) => ({
@@ -134,80 +43,54 @@ function normalizeRagFiles(data) {
       url:  m?.url  || ""
     }));
   }
-  if (data.ragFileName) {
-    const names = String(data.ragFileName).split(",").map(s => s.trim()).filter(Boolean);
-    return names.map((n, i) => ({
-      name: n,
-      path: i === 0 ? (data.ragFilePath || "") : "",
-      url:  i === 0 ? (data.ragFileUrl  || "") : ""
-    }));
+  if (data.ragFileName || data.ragFileUrl || data.ragFilePath) {
+    return [{
+      name: data.ragFileName || "document.pdf",
+      url:  data.ragFileUrl  || "",
+      path: data.ragFilePath || ""
+    }];
   }
   return [];
 }
 
-/** Storage SDK만 사용해서 Blob 획득 (CORS 회피) */
-async function downloadPdfBlob(meta) {
-  let path = toBucketRelativePath(meta?.path || "");
-  if (!path && meta?.url) path = pathFromUrl(meta.url);
-  if (!path) throw new Error("파일을 다운로드할 수 없습니다. (path 누락)");
-
-  const refObj = sRef(storage, path);
-  try {
-    return await getBlob(refObj);
-  } catch {
-    const ab = await getBytes(refObj);
-    return new Blob([ab], { type: "application/pdf" });
-  }
-}
-
-/** Assistant 생성 또는 업데이트 (업서트) */
-async function upsertAssistant({ existingAssistantId, model, name, instructions, vectorStoreId, chatbotDocId }) {
-  const tools = vectorStoreId ? [{ type: "file_search" }] : [];
-  const body = {
-    model,
-    name,
-    instructions,
-    tools,
-    ...(vectorStoreId ? { tool_resources: { file_search: { vector_store_ids: [vectorStoreId] } } } : {}),
-    metadata: { chatbotDocId, source: "ChatbotList" }
-  };
-
-  if (existingAssistantId) {
-    return openaiFetch(`/assistants/${existingAssistantId}`, { method: "POST", body });
-  } else {
-    return openaiFetch("/assistants", { method: "POST", body });
-  }
-}
-
-/* ===== UI ===== */
+/* ===== 메인 ===== */
 onAuthStateChanged(auth, async (user) => {
   if (!user) {
     alert("로그인이 필요합니다.");
-    window.location.href = "LogIn.html";
+    window.location.href = "AfterLogIn.html";
     return;
   }
 
   try {
     const colRef = collection(db, "chatbots");
-    const [snapOwner, snapUid] = await Promise.all([
+
+    // ✅ 신/구 스키마 동시 지원 (ownerUid 또는 uid)
+    const [snapOwner, snapLegacy] = await Promise.all([
       getDocs(query(colRef, where("ownerUid", "==", user.uid))),
       getDocs(query(colRef, where("uid", "==", user.uid)))
     ]);
 
     const seen = new Set();
     const docs = [];
-    for (const snap of [snapOwner, snapUid]) {
-      snap.forEach((d) => { if (!seen.has(d.id)) { seen.add(d.id); docs.push(d); }});
+    [snapOwner, snapLegacy].forEach(snap => {
+      snap.forEach(d => {
+        if (!seen.has(d.id)) { seen.add(d.id); docs.push(d); }
+      });
+    });
+
+    if (docs.length === 0) {
+      listContainer.innerHTML = "<p>요청한 챗봇이 없습니다.</p>";
+      return;
     }
 
-    listContainer.innerHTML = docs.length ? "" : "<p>요청한 챗봇이 없습니다.</p>";
-    docs.forEach((docSnap) => {
-      try { renderCard(docSnap); }
-      catch (e) { console.error("카드 렌더 실패:", e); }
-    });
+    listContainer.innerHTML = "";
+    docs.forEach((docSnap) => renderCard(docSnap));
+
   } catch (err) {
     console.error(err);
-    listContainer.innerHTML = `<p>목록을 불러오는 중 오류가 발생했습니다.<br/>${escapeHtml(err.message || String(err))}</p>`;
+    listContainer.innerHTML = `
+      <p>목록을 불러오는 중 오류가 발생했습니다.<br/>
+      ${escapeHtml(err.message || String(err))}</p>`;
   }
 });
 
@@ -219,11 +102,6 @@ function renderCard(docSnap) {
   const name = data.name ?? "(이름 없음)";
   const subject = data.subject ?? "(교과 없음)";
   const description = data.description ?? "";
-  const useRag = (data.useRag ?? data.rag ?? false);
-  const useFewShot = data.useFewShot ?? false;
-  const examples = Array.isArray(data.examples) ? data.examples : [];
-  const selfConsistency = data.selfConsistency ?? false;
-
   const modelDisplay =
     (data.model && String(data.model)) ||
     (data.customModelValue && String(data.customModelValue)) ||
@@ -231,19 +109,13 @@ function renderCard(docSnap) {
     "(미지정)";
 
   const ragList = normalizeRagFiles(data);
-
   const ragFilesHtml = ragList.length
     ? ragList.map((m, i) => {
         const label = `${i + 1}. ${escapeHtml(m.name || `파일 ${i + 1}`)}`;
-        const path = toBucketRelativePath(m?.path || "") || pathFromUrl(m?.url || "");
-        return path
-          ? `<div><a class="rag-link" href="#" data-path="${escapeHtml(path)}">${label}</a></div>`
-          : `<div>${label}</div>`;
+        const link = m.url ? `<a class="rag-url" href="${escapeHtml(m.url)}" target="_blank" rel="noopener">${label}</a>` 
+                           : `<a class="rag-path" href="#" data-path="${escapeHtml(m.path || "")}">${label}</a>`;
+        return `<div>${link}</div>`;
       }).join("")
-    : "없음";
-
-  const examplesHtml = examples.length
-    ? examples.map((e,i)=>`<div style="white-space:pre-wrap;">${i+1}. ${escapeHtml(e)}</div>`).join("")
     : "없음";
 
   card.innerHTML = `
@@ -251,160 +123,25 @@ function renderCard(docSnap) {
     <p><strong>교과:</strong> ${escapeHtml(subject)}</p>
     <p><strong>모델:</strong> ${escapeHtml(modelDisplay)}</p>
     <p><strong>설명:</strong></p>
-    ${renderMultiline(description)}
-    <p><strong>RAG:</strong> ${useRag ? "사용" : "미사용"}</p>
+    <div style="white-space:pre-wrap;">${escapeHtml(description)}</div>
     <p><strong>RAG 파일:</strong><br>${ragFilesHtml}</p>
-    <p><strong>few-shot:</strong> ${useFewShot ? "사용" : "미사용"}</p>
-    <p><strong>예시:</strong></p>
-    ${examplesHtml}
-    <p><strong>self-consistency:</strong> ${selfConsistency ? "사용" : "미사용"}</p>
     <div class="card-buttons">
-      <button class="create-btn">생성</button>
-      <button class="student-btn">학생용 링크</button>
       <button class="edit-btn">수정</button>
       <button class="delete-btn">삭제</button>
     </div>
   `;
 
-  const createBtn = card.querySelector(".create-btn");
-  const studentBtn = card.querySelector(".student-btn");
-
-  // 이미 assistantId가 있으면 기본 라벨 교체
-  let currentAssistantId = data.assistantId ?? null;
-  if (currentAssistantId) createBtn.textContent = "다시 생성/업데이트";
-
-  // 학생용 버튼 상태(assistant가 없으면 비활성)
-  if (!currentAssistantId) {
-    studentBtn.disabled = true;
-    studentBtn.title = "먼저 '생성'을 눌러 Assistant를 만들어 주세요.";
-  }
-
-  // 🔹 학생용 페이지로 이동 (assistantId + 메타 전달) — Firestore 읽기 불필요
-  studentBtn.addEventListener("click", () => {
-    if (!currentAssistantId) return;
-    const params = new URLSearchParams({
-      assistantId: currentAssistantId,
-      name: name || "학생용 챗봇",
-      subject: subject || "",
-      model: String(modelDisplay || "")
-    });
-    window.open(`StudentChat.html?${params.toString()}`, "_blank", "noopener");
-  });
-
-  createBtn.addEventListener("click", async () => {
-    try {
-      if (!OPENAI_API_KEY) {
-        alert("OpenAI API 키가 설정되어 있지 않습니다. VITE_OPENAI_API_KEY를 설정하세요.");
-        return;
-      }
-      setCreateState(createBtn, currentAssistantId ? "업데이트 중…" : "생성 중…", true);
-      toast(currentAssistantId ? "Assistant 업데이트 준비…" : "Assistant 생성 준비…");
-
-      const model =
-        (data.model && String(data.model)) ||
-        (data.customModelValue && String(data.customModelValue)) ||
-        (data.modelSelectValue && String(data.modelSelectValue)) ||
-        "gpt-4o-mini";
-
-      let vectorStoreId = null;
-
-      if (useRag && ragList.length) {
-        toast("Vector Store 생성 중…");
-        const vs = await createVectorStore(`vs_${Date.now()}_${docSnap.id}`);
-        vectorStoreId = vs.id;
-
-        let ok = 0;
-        for (const m of ragList) {
-          try {
-            const blob = await downloadPdfBlob(m);
-            const file = new File([blob], m.name || "document.pdf", { type: "application/pdf" });
-            const up = await uploadFileToOpenAI(file);
-            await attachToVS(vectorStoreId, up.id);
-            await waitIndexed(vectorStoreId, up.id);
-            ok++;
-          } catch (e) {
-            console.warn("RAG 파일 스킵:", m?.name, e?.message || e);
-          }
-        }
-        if (ok === 0) {
-          vectorStoreId = null;
-          toast("⚠️ RAG 파일 인덱싱 실패로 RAG 없이 진행합니다.", 2000);
-        }
-      }
-
-      const instructions = buildInstructions(description, !!vectorStoreId, useFewShot, examples);
-
-      toast(currentAssistantId ? "Assistant 업데이트 중…" : "Assistant 생성 중…");
-      const assistant = await upsertAssistant({
-        existingAssistantId: currentAssistantId,
-        model,
-        name,
-        instructions,
-        vectorStoreId,
-        chatbotDocId: docSnap.id
-      });
-
-      await updateDoc(doc(db, "chatbots", docSnap.id), {
-        assistantId: assistant.id,
-        vectorStoreId: vectorStoreId || null,
-        assistantModelSnapshot: model,
-        assistantCreatedAt: currentAssistantId ? (data.assistantCreatedAt || serverTimestamp()) : serverTimestamp(),
-        assistantUpdatedAt: serverTimestamp()
-      });
-
-      // ✅ 성공 후에도 버튼을 다시 쓸 수 있게:
-      currentAssistantId = assistant.id;               // 메모리에 반영
-      setCreateState(createBtn, "다시 생성/업데이트", false); // 라벨/활성화
-      toast(currentAssistantId ? "✅ 업데이트 완료!" : "✅ 생성 완료!");
-
-      // ✅ 학생 페이지가 파라미터 없이 열려도 동작하도록 마지막 assistant/문서 기억
-      try {
-        localStorage.setItem("last_student_assistant", assistant.id);
-        localStorage.setItem("last_student_doc", docSnap.id);
-      } catch {}
-
-      // ✅ 학생용 버튼 활성화
-      studentBtn.disabled = false;
-      studentBtn.title = "";
-
-    } catch (e) {
-      console.error(e);
-      alert("생성/업데이트 실패: " + (e?.message || e));
-      setCreateState(createBtn, currentAssistantId ? "다시 생성/업데이트" : "생성", false);
-    }
-  });
-
   // 수정
-  const editBtn = card.querySelector(".edit-btn");
-  editBtn.addEventListener("click", () => {
-    const payload = {
-      id: docSnap.id,
-      name: data.name ?? "",
-      subject: data.subject ?? "",
-      description: data.description ?? "",
-      rag: data.useRag ?? data.rag ?? false,
-      ragFileName: data.ragFileName ?? "",
-      ragFileUrl: data.ragFileUrl ?? "",
-      ragFilePath: data.ragFilePath ?? "",
-      ragFiles: normalizeRagFiles(data),
-      useFewShot: data.useFewShot ?? false,
-      examples: Array.isArray(data.examples) ? data.examples : [],
-      selfConsistency: data.selfConsistency ?? false
-    };
-    try { localStorage.setItem("editChatbot", JSON.stringify(payload)); } catch {}
+  card.querySelector(".edit-btn").addEventListener("click", () => {
     window.location.href = `CreateChatbot.html?id=${encodeURIComponent(docSnap.id)}`;
   });
 
-  // 삭제
-  const deleteBtn = card.querySelector(".delete-btn");
-  deleteBtn.addEventListener("click", async () => {
-    const confirmDelete = confirm("정말 삭제하시겠습니까?");
-    if (!confirmDelete) return;
-
+  // 삭제 (Storage 파일도 같이 정리 — 실패해도 목록 삭제는 진행)
+  card.querySelector(".delete-btn").addEventListener("click", async () => {
+    if (!confirm("정말 삭제하시겠습니까?")) return;
     try {
       const all = normalizeRagFiles(data);
-      const legacy = data.ragFilePath ? [{ path: data.ragFilePath }] : [];
-      for (const m of [...all, ...legacy]) {
+      for (const m of all) {
         if (!m?.path) continue;
         try { await deleteObject(sRef(storage, m.path)); } catch (e) {
           console.warn("Storage 파일 삭제 스킵/실패:", e?.message);
@@ -418,9 +155,9 @@ function renderCard(docSnap) {
     }
   });
 
-  // RAG 링크: 안전 URL 생성 후 새 탭
+  // Storage 경로만 있는 링크 클릭 시에만 URL 생성 시도
   card.addEventListener("click", async (e) => {
-    const a = e.target.closest("a.rag-link");
+    const a = e.target.closest("a.rag-path");
     if (!a) return;
     e.preventDefault();
     const path = a.dataset.path || "";

@@ -1,7 +1,7 @@
 /* 페이지 레이아웃 — 화면 중앙 배치 */
 body {
   margin: 0;
-  font-family: "Noto Sans KR", sans-serif;
+  font-family: "Noto Sans KR", system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
   background-color: #f5f8fc;
   min-height: 100vh;
   display: flex;
@@ -85,11 +85,12 @@ form {
 
 input[type="text"], textarea, input[type="file"], select {
   padding: 10px;
-  border: 1px solid #ccc;
+  border: 1px solid #e5e7eb;
   border-radius: 8px;
   font-size: 14px;
   width: 100%;
   box-sizing: border-box;
+  background: #fff;
 }
 textarea {
   resize: vertical;
@@ -140,29 +141,32 @@ button[type="submit"]:hover, #testButton:hover {
   flex: 1;
   background: white;
   border-radius: 12px;
-  padding: 16px;
+  padding: 16px 20px;
   overflow-y: auto;
   margin-bottom: 12px;
-  border: 1px solid #ccc;
+  border: 1px solid #e5e7eb;
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 12px;
+  scroll-behavior: smooth;
 }
 .chat-message {
-  max-width: 80%;
-  padding: 10px 14px;
+  max-width: 86%;
+  padding: 12px 16px;
   border-radius: 16px;
-  font-size: 14px;
+  font-size: 15px;
+  line-height: 1.65;
   word-break: break-word;
+  background: #f7f7f7;
 }
 .chat-message.user { align-self: flex-end; background-color: #cce5ff; }
-.chat-message.bot  { align-self: flex-start; background-color: #f0f0f0; }
+.chat-message.bot  { align-self: flex-start; background-color: #f7f7f9; }
 
 /* 입력 박스 */
 .input-panel {
   display: flex;
   align-items: center;
-  border: 1px solid #ccc;
+  border: 1px solid #e5e7eb;
   border-radius: 20px;
   padding: 8px 12px;
   background: white;
@@ -174,6 +178,7 @@ button[type="submit"]:hover, #testButton:hover {
   outline: none;
   flex: 1;
   font-size: 14px;
+  background: transparent;
 }
 .input-panel button {
   background-color: #003478;
@@ -201,6 +206,78 @@ button[type="submit"]:hover, #testButton:hover {
   font-size: 13px;
   cursor: pointer;
 }
-.file-del-btn:hover {
-  background-color: #e63b3b;
+.file-del-btn:hover { background-color: #e63b3b; }
+
+/* -------- ChatGPT-like readable content -------- */
+.chat-message .prose {
+  color: #1f2937;
+  line-height: 1.75;
+  font-size: 15px;
+}
+.chat-message .prose p { margin: 0.6em 0; }
+.chat-message .prose h1,
+.chat-message .prose h2,
+.chat-message .prose h3,
+.chat-message .prose h4 {
+  margin: 1.2em 0 0.5em;
+  line-height: 1.3;
+  color: #0f172a;
+}
+.chat-message .prose ul,
+.chat-message .prose ol {
+  padding-left: 1.35em;
+  margin: 0.6em 0;
+}
+.chat-message .prose li { margin: 0.25em 0; }
+.chat-message .prose blockquote {
+  margin: 0.9em 0;
+  padding: 0.6em 0.9em;
+  border-left: 4px solid #d1d5db;
+  background: #f8fafc;
+  border-radius: 6px;
+}
+.chat-message .prose code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+  background: #f6f8fa;
+  padding: 0.15em 0.35em;
+  border-radius: 6px;
+  font-size: 0.95em;
+}
+.chat-message .prose pre {
+  background: #0f172a;
+  color: #e5e7eb;
+  padding: 12px 14px;
+  border-radius: 10px;
+  overflow-x: auto;
+  margin: 0.9em 0;
+  line-height: 1.6;
+}
+.chat-message .prose pre code {
+  background: transparent;
+  padding: 0;
+  color: inherit;
+  font-size: 0.95em;
+}
+.chat-message .prose a {
+  color: #0b63d1;
+  text-decoration: none;
+}
+.chat-message .prose a:hover { text-decoration: underline; }
+.chat-message .prose table {
+  border-collapse: collapse;
+  width: 100%;
+  margin: 0.9em 0;
+}
+.chat-message .prose th,
+.chat-message .prose td {
+  border: 1px solid #e5e7eb;
+  padding: 6px 8px;
+  text-align: left;
+  background: #fff;
+}
+.chat-message .prose th { background: #f3f4f6; }
+
+/* MathJax (수식) 간격 */
+.chat-message .mjx-container {
+  margin: 10px 0;
 }

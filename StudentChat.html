@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>학생용 챗봇</title>
+  <link rel="stylesheet" href="StudentChatStyles.css"/>
+</head>
+<body>
+  <div class="page">
+    <div class="topbar">
+      <a href="StudentLogin.html" class="home-btn" title="처음으로">
+        <img src="https://img.icons8.com/ios-filled/24/ffffff/home.png" alt="홈"/>
+      </a>
+      <div class="title-area">
+        <h1 id="botTitle">학생용 챗봇</h1>
+        <div class="subtitle">
+          <span id="subjectLabel"></span>
+          <span id="modelLabel"></span>
+        </div>
+      </div>
+      <div class="right-actions">
+        <button id="resetThreadBtn" class="btn ghost">새로 시작</button>
+      </div>
+    </div>
+
+    <div class="nickname-bar">
+      <label for="nicknameInput">닉네임</label>
+      <input id="nicknameInput" type="text" maxlength="20" placeholder="예: 과학짱"/>
+      <button id="saveNickBtn" class="btn small">저장</button>
+    </div>
+
+    <div id="chatWindow" class="chat-window"></div>
+
+    <form id="composer" class="composer" autocomplete="off">
+      <textarea id="userMessage" rows="2" placeholder="메시지를 입력하세요. (Shift+Enter 줄바꿈)"></textarea>
+      <button id="sendBtn" class="btn primary" type="submit">보내기</button>
+    </form>
+  </div>
+
+  <script type="module" src="src/StudentChatMain.js"></script>
+</body>
+</html>

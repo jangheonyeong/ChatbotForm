@@ -1,3 +1,5 @@
+// [src/ChatbotListMain.js]
+
 import { initializeApp } from "firebase/app";
 import { getAuth, onAuthStateChanged } from "firebase/auth";
 import {
@@ -258,16 +260,36 @@ function renderCard(docSnap) {
     <p><strong>self-consistency:</strong> ${selfConsistency ? "사용" : "미사용"}</p>
     <div class="card-buttons">
       <button class="create-btn">생성</button>
+      <button class="student-btn">학생용 링크</button>
       <button class="edit-btn">수정</button>
       <button class="delete-btn">삭제</button>
     </div>
   `;
 
   const createBtn = card.querySelector(".create-btn");
+  const studentBtn = card.querySelector(".student-btn");
 
   // 이미 assistantId가 있으면 기본 라벨 교체
   let currentAssistantId = data.assistantId ?? null;
   if (currentAssistantId) createBtn.textContent = "다시 생성/업데이트";
+
+  // 학생용 버튼 상태(assistant가 없으면 비활성)
+  if (!currentAssistantId) {
+    studentBtn.disabled = true;
+    studentBtn.title = "먼저 '생성'을 눌러 Assistant를 만들어 주세요.";
+  }
+
+  // 🔹 학생용 페이지로 이동 (assistantId + 메타 전달) — Firestore 읽기 불필요
+  studentBtn.addEventListener("click", () => {
+    if (!currentAssistantId) return;
+    const params = new URLSearchParams({
+      assistantId: currentAssistantId,
+      name: name || "학생용 챗봇",
+      subject: subject || "",
+      model: String(modelDisplay || "")
+    });
+    window.open(`StudentChat.html?${params.toString()}`, "_blank", "noopener");
+  });
 
   createBtn.addEventListener("click", async () => {
     try {
@@ -334,6 +356,16 @@ function renderCard(docSnap) {
       currentAssistantId = assistant.id;               // 메모리에 반영
       setCreateState(createBtn, "다시 생성/업데이트", false); // 라벨/활성화
       toast(currentAssistantId ? "✅ 업데이트 완료!" : "✅ 생성 완료!");
+
+      // ✅ 학생 페이지가 파라미터 없이 열려도 동작하도록 마지막 assistant/문서 기억
+      try {
+        localStorage.setItem("last_student_assistant", assistant.id);
+        localStorage.setItem("last_student_doc", docSnap.id);
+      } catch {}
+
+      // ✅ 학생용 버튼 활성화
+      studentBtn.disabled = false;
+      studentBtn.title = "";
 
     } catch (e) {
       console.error(e);

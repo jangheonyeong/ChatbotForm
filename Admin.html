@@ -10,13 +10,15 @@
   <div class="mindmap-wrapper">
     <h1>교과별 챗봇 요청 마인드맵</h1>
     <div class="mindmap-container">
-      <!-- 🎯 viewBox를 명시적으로 Q지정해서 좌표계 맞춤 -->
+      <!-- 🎯 좌표계 맞춤 -->
       <svg id="connector-lines" viewBox="0 0 800 800" width="800" height="800" preserveAspectRatio="none"></svg>
       <div class="center-node">챗봇</div>
       <div id="subject-nodes"></div>
     </div>
   </div>
 
+  <!-- ✅ 관리자 접근 가드: 반드시 메인 스크립트보다 먼저 로드 -->
+  <script type="module" src="src/guardAdminMain.js"></script>
   <script type="module" src="src/AdminMain.js"></script>
 </body>
 </html>

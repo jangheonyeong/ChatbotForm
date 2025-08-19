@@ -9,15 +9,15 @@ import {
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
 import { firebaseConfig } from "../firebaseConfig.js";
 
+// ✅ 화이트리스트/판별 함수 공통 모듈 사용
+import { isTeacher, isAdmin } from "./rolesMain.js";
+
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
 
 // 항상 계정 선택 창을 띄우도록 설정
 const provider = new GoogleAuthProvider();
 provider.setCustomParameters({ prompt: "select_account" });
-
-// 교사용 이메일 화이트리스트(예시)
-const adminEmails = ["wkdgjsdud@snu.ac.kr"];
 
 // 버튼
 const studentBtn = document.getElementById("studentStartBtn");
@@ -53,7 +53,7 @@ async function startAsStudent() {
   }
 }
 
-// ── 교사: 항상 계정 선택 → 권한에 따라 분기
+// ── 교사: 항상 계정 선택 → 허용 이메일만 교사용/관리자 페이지 접근
 async function startAsTeacher() {
   try {
     if (useRedirect) {
@@ -63,11 +63,16 @@ async function startAsTeacher() {
     } else {
       const res = await signInWithPopup(auth, provider);
       const email = res.user?.email || "";
-      if (adminEmails.includes(email)) {
-        window.location.href = "Admin.html";
-      } else {
-        window.location.href = "AfterLogIn.html";
+
+      // 교사 허용(또는 관리자) 아니면 차단
+      if (!(isTeacher(email) || isAdmin(email))) {
+        alert("승인된 교사 계정이 아닙니다.");
+        await auth.signOut();
+        return; // 차단
       }
+
+      // 관리자면 Admin으로, 아니면 교사용 페이지로
+      window.location.href = isAdmin(email) ? "Admin.html" : "AfterLogIn.html";
     }
   } catch (err) {
     showLoginError(err);
@@ -85,11 +90,15 @@ getRedirectResult(auth)
       window.location.href = "StudentLogin.html";
     } else if (flow === "teacher") {
       const email = res.user?.email || "";
-      if (adminEmails.includes(email)) {
-        window.location.href = "Admin.html";
-      } else {
-        window.location.href = "AfterLogIn.html";
+
+      if (!(isTeacher(email) || isAdmin(email))) {
+        alert("승인된 교사 계정이 아닙니다.");
+        auth.signOut();
+        window.location.href = "index.html";
+        return;
       }
+
+      window.location.href = isAdmin(email) ? "Admin.html" : "AfterLogIn.html";
     }
   })
   .catch(showLoginError);

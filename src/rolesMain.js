@@ -3,7 +3,6 @@
 export const TEACHER_EMAILS = [
   "janghy0412@gmail.com",   // 교사용 허용
   "wkdgjsdud@snu.ac.kr",
-  "wkdgjsdud00@gmail.com",
   "naro3445@gmail.com", 
   "qhtjs34@snu.ac.kr", 
   "leese0708@snu.ac.kr", 

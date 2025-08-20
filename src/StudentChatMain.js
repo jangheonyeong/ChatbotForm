@@ -1,15 +1,45 @@
 // [src/StudentChatMain.js] — 학생 전용 Assistants v2 채팅 페이지
-// Firestore 읽기 없이도 쿼리 파라미터(assistantId, name, subject, model)만으로 작동
+// 변경점 요약
+// 1) 익명 인증 추가 → Firestore 쓰기 전에 request.auth 확보
+// 2) 학생 대화 저장: student_conversations/{convId} + messages/{msgId}
+// 3) URL 파라미터 assistant ↔ assistantId 둘 다 지원
+// 4) 교과/모델/교사UID/챗봇문서ID 메타를 대화에 중복 저장
+// 5) ★ 세컨더리 Firebase App('student-app') 사용 → 교사 세션과 분리
 
-import { initializeApp } from "firebase/app";
+import { initializeApp, getApps } from "firebase/app";
 import {
-  getFirestore, doc, getDoc
+  getFirestore, doc, getDoc,
+  collection, addDoc, setDoc, serverTimestamp
 } from "firebase/firestore";
+import { getAuth, signInAnonymously } from "firebase/auth";
 import { firebaseConfig } from "../firebaseConfig.js";
 
-/* ===== Firebase init (읽기 전용) ===== */
-const app = initializeApp(firebaseConfig);
+/* ===== 상수 (컬렉션 경로) ===== */
+// 규칙을 student_conversations에 맞춰 배포했다면 그대로 사용.
+// 기존 "conversations"를 쓰고 있다면 아래 한 줄만 "conversations"로 바꾸세요.
+const CONV_COL = "student_conversations";
+const MSGS_SUB = "messages";
+
+/* ===== Firebase init (세션 분리: 세컨더리 앱) ===== */
+// 기본 앱(교사용)과 분리된 이름 있는 앱을 사용해 Auth 세션 충돌을 방지합니다.
+const app =
+  getApps().find(a => a.name === "student-app") ||
+  initializeApp(firebaseConfig, "student-app");
 const db = getFirestore(app);
+const auth = getAuth(app);
+
+// 익명 인증: Firestore 쓰기 전에 꼭 불러 request.auth를 채움
+async function ensureAuth() {
+  if (auth.currentUser) return auth.currentUser;
+  try {
+    const cred = await signInAnonymously(auth);
+    return cred.user;
+  } catch (e) {
+    console.error("Anonymous auth failed:", e);
+    alert("익명 인증에 실패했습니다. Firebase 콘솔에서 Anonymous 로그인 제공업체를 활성화해 주세요.");
+    throw e;
+  }
+}
 
 /* ===== DOM ===== */
 const botTitle = document.getElementById("botTitle");
@@ -124,12 +154,12 @@ saveNickBtn.addEventListener("click", () => {
   renderBubble("assistant", `닉네임을 "${nickInput.value || "손님"}"로 저장했어요.`);
 });
 
-/* ===== Thread persistence ===== */
-function threadKey(assistantId, nickname) {
-  return `thread:${assistantId}:${nickname || "guest"}`;
+/* ===== Thread persistence (OpenAI) ===== */
+function threadKey(aid, nickname) {
+  return `thread:${aid}:${nickname || "guest"}`;
 }
-async function getOrCreateThread(assistantId, nickname) {
-  const key = threadKey(assistantId, nickname);
+async function getOrCreateThread(aid, nickname) {
+  const key = threadKey(aid, nickname);
   let tid = localStorage.getItem(key);
   if (tid) return tid;
   const t = await createThread();
@@ -137,49 +167,114 @@ async function getOrCreateThread(assistantId, nickname) {
   localStorage.setItem(key, tid);
   return tid;
 }
-function resetThread(assistantId, nickname) {
-  const key = threadKey(assistantId, nickname);
+function resetThread(aid, nickname) {
+  const key = threadKey(aid, nickname);
   localStorage.removeItem(key);
 }
 
-/* ===== Page boot: load chatbot meta → prepare UI ===== */
+/* ===== Conversation persistence (Firestore) ===== */
+function convKey(aid, nickname) {
+  return `conv:${aid}:${nickname || "guest"}`;
+}
+
 let assistantId = null;
 let chatbotDocId = null;
+let teacherUid = null;
+let subjectStr = "";
+let modelStr = "";
+let conversationId = null;
 
+async function ensureConversation() {
+  await ensureAuth(); // ← 인증 보장
+
+  const nickname = nickInput.value.trim() || "손님";
+  const key = convKey(assistantId, nickname);
+  let convId = localStorage.getItem(key);
+
+  if (!convId) {
+    // 새 대화 생성
+    const convRef = await addDoc(collection(db, CONV_COL), {
+      assistantId,
+      subject: subjectStr || "",
+      model: modelStr || "",
+      teacherUid: teacherUid || "",     // 없으면 빈 문자열
+      chatbotDocId: chatbotDocId || "", // 없으면 빈 문자열
+      studentNickname: nickname,
+      createdAt: serverTimestamp(),
+      updatedAt: serverTimestamp()
+    });
+    convId = convRef.id;
+    localStorage.setItem(key, convId);
+  } else {
+    // 최종 활동 시각만 갱신
+    try {
+      await setDoc(doc(db, CONV_COL, convId), { updatedAt: serverTimestamp() }, { merge: true });
+    } catch {}
+  }
+
+  conversationId = convId;
+  return convId;
+}
+
+async function logMessage(role, content) {
+  await ensureAuth(); // ← 인증 보장
+  if (!conversationId) await ensureConversation();
+  try {
+    await addDoc(collection(db, `${CONV_COL}/${conversationId}/${MSGS_SUB}`), {
+      role, content, createdAt: serverTimestamp()
+    });
+    await setDoc(doc(db, CONV_COL, conversationId), { updatedAt: serverTimestamp() }, { merge: true });
+  } catch (e) {
+    console.warn("logMessage failed:", e?.message || e);
+  }
+}
+
+/* ===== Page boot: load chatbot meta → prepare UI ===== */
 async function loadChatbotMeta() {
-  // 두 방식 지원:
-  // 1) ?assistantId=... (권장: Firestore 접근 없음)
-  // 2) ?id=<chatbots 문서ID> (있는 경우에만 Firestore 읽기)
+  // 파라미터 호환: ?assistant=... 또는 ?assistantId=...
   chatbotDocId = qsParam("id");
-  assistantId = qsParam("assistantId");
+  assistantId = qsParam("assistant") || qsParam("assistantId");
 
-  // 🔹 쿼리 메타로 헤더 즉시 채우기 (Firestore 없이도 표시 가능)
+  // 쿼리 메타로 헤더 채우기
   const qName = qsParam("name");
   const qSubject = qsParam("subject");
   const qModel = qsParam("model");
+  const qTeacherUid = qsParam("teacherUid");
+
   if (qName)    botTitle.textContent = qName;
   if (qSubject) subjectLabel.textContent = qSubject ? `교과: ${qSubject}` : "";
   if (qModel)   modelLabel.textContent = qModel ? `모델: ${qModel}` : "";
+  if (qTeacherUid) teacherUid = qTeacherUid;
 
-  // 문서 ID가 있을 때만 Firestore 조회(비로그인 학생은 권한 없을 수 있음)
+  subjectStr = qSubject || "";
+  modelStr = qModel || "";
+
+  // Firestore 문서가 있을 때만 보강 (학생은 권한 없을 수 있으니 try/catch)
   if (chatbotDocId) {
     try {
       const snap = await getDoc(doc(db, "chatbots", chatbotDocId));
       if (snap.exists()) {
         const data = snap.data() || {};
         assistantId = data.assistantId || assistantId;
-        // 쿼리 메타가 비어 있으면 Firestore 값으로 보강
         if (!qName && data.name) botTitle.textContent = data.name;
-        if (!qSubject && data.subject) subjectLabel.textContent = `교과: ${data.subject}`;
-        if (!qModel && data.assistantModelSnapshot) modelLabel.textContent = `모델: ${data.assistantModelSnapshot}`;
+        if (!qSubject && data.subject) {
+          subjectStr = data.subject;
+          subjectLabel.textContent = `교과: ${data.subject}`;
+        }
+        if (!qModel && data.assistantModelSnapshot) {
+          modelStr = data.assistantModelSnapshot;
+          modelLabel.textContent = `모델: ${data.assistantModelSnapshot}`;
+        }
+        if (!teacherUid && (data.ownerUid || data.uid)) {
+          teacherUid = data.ownerUid || data.uid;
+        }
       }
     } catch (err) {
-      // 권한 부족이어도 채팅 자체는 assistantId만으로 가능
       console.warn("Firestore 읽기 실패(무시 가능):", err?.message || err);
     }
   }
 
-  // 마지막 생성값으로 복구 (옵션)
+  // 마지막 기록 복구(옵션)
   if (!assistantId) {
     const lastAid = localStorage.getItem("last_student_assistant");
     const lastDoc = localStorage.getItem("last_student_doc");
@@ -190,7 +285,7 @@ async function loadChatbotMeta() {
   }
 
   if (!assistantId) {
-    throw new Error("assistantId가 없습니다. ChatbotList의 '학생용 링크'로 열거나, URL에 ?assistantId=asst_xxx 를 포함해 주세요.");
+    throw new Error("assistantId가 없습니다. ChatbotList의 '학생용 링크'로 열거나, URL에 ?assistant=asst_xxx 를 포함해 주세요.");
   }
 }
 
@@ -199,7 +294,11 @@ async function sendMessageFlow(text) {
   const nickname = nickInput.value.trim() || "손님";
   const threadId = await getOrCreateThread(assistantId, nickname);
 
-  // 1) 사용자 메시지 추가
+  // 로깅: 사용자 메시지 저장
+  await ensureConversation();
+  await logMessage("user", text);
+
+  // 1) 사용자 메시지 추가(Assistants)
   await addMessage(threadId, text);
 
   // 2) Run 생성
@@ -218,11 +317,13 @@ async function sendMessageFlow(text) {
   renderTyping(false);
 
   if (status !== "completed") {
-    renderBubble("assistant", `처리 중 문제가 발생했습니다. (상태: ${status})`);
+    const msg = `처리 중 문제가 발생했습니다. (상태: ${status})`;
+    renderBubble("assistant", msg);
+    await logMessage("system", msg);
     return;
   }
 
-  // 4) 메시지 목록에서 가장 최근 assistant 응답 표시
+  // 4) 가장 최근 assistant 응답 표시 + 로깅
   const msgs = await listMessages(threadId);
   const all = msgs.data || [];
   for (let i = all.length - 1; i >= 0; i--) {
@@ -232,6 +333,7 @@ async function sendMessageFlow(text) {
     const txtPart = parts.find(p => p.type === "text");
     const textValue = txtPart?.text?.value || "(빈 응답)";
     renderBubble("assistant", textValue);
+    await logMessage("assistant", textValue);
     break;
   }
 }
@@ -249,7 +351,9 @@ composer.addEventListener("submit", async (e) => {
     await sendMessageFlow(text);
   } catch (err) {
     console.error(err);
-    renderBubble("assistant", `❌ 오류: ${err?.message || err}`);
+    const msg = `❌ 오류: ${err?.message || err}`;
+    renderBubble("assistant", msg);
+    await logMessage("system", msg);
   } finally {
     setSending(false);
   }
@@ -264,7 +368,7 @@ userMessageEl.addEventListener("keydown", (e) => {
 });
 
 // 새로 시작(새 thread)
-resetThreadBtn.addEventListener("click", () => {
+resetThreadBtn.addEventListener("click", async () => {
   if (!assistantId) return;
   const nickname = nickInput.value.trim() || "손님";
   const ok = confirm("대화를 처음부터 다시 시작할까요?");
@@ -272,12 +376,16 @@ resetThreadBtn.addEventListener("click", () => {
   resetThread(assistantId, nickname);
   chatWindow.innerHTML = "";
   renderBubble("assistant", "새 대화를 시작했어요. 무엇이든 물어보세요!");
+  // 기존 conversation은 유지(학습용). 완전히 새로 만들고 싶으면 아래 주석 해제:
+  // localStorage.removeItem(convKey(assistantId, nickname));
+  // conversationId = null;
 });
 
 /* ===== Init ===== */
 (async function init() {
   try {
     loadNick();
+    await ensureAuth();         // ★ 익명 인증 먼저 확보(세컨더리 앱)
     await loadChatbotMeta();
     renderBubble("assistant", "안녕하세요! 질문을 입력하면 도와드릴게요. (첨부 자료가 있다면 우선적으로 근거를 사용합니다.)");
   } catch (err) {

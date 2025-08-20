@@ -1,9 +1,12 @@
-// [src/ChatbotListMain.js] — 내 문서만 목록 + Assistant 생성/업데이트(기존 VS 재사용) + RAG 인덱싱 최적화
+// [src/ChatbotListMain.js] — 내 문서만 목록 + Assistant 생성/업데이트 + RAG 인덱싱
+// ✅ 변경 핵심
+// 1) 각 카드에 "CSV 내보내기" 버튼 추가(교과(subject) 기준 + 기간 필터)
+// 2) 학생용 링크에 teacherUid와 assistantId 파라미터 포함(로깅 신뢰성 ↑)
 
 import { initializeApp } from "firebase/app";
 import { getAuth, onAuthStateChanged } from "firebase/auth";
 import {
-  getFirestore, collection, query, where, getDocs, deleteDoc, doc, updateDoc, serverTimestamp
+  getFirestore, collection, query, where, getDocs, deleteDoc, doc, updateDoc, serverTimestamp, Timestamp
 } from "firebase/firestore";
 import { getStorage, ref as sRef, getBlob, getBytes, deleteObject, getDownloadURL } from "firebase/storage";
 import { firebaseConfig } from "../firebaseConfig.js";
@@ -73,7 +76,6 @@ async function listVSFilesWithNames(vsId) {
     const data = await openaiFetch(`/vector_stores/${vsId}/files${qs}`);
     const arr = Array.isArray(data?.data) ? data.data : [];
     for (const f of arr) {
-      // f.id만 있으니 파일명은 /files/{id}로 조회
       try {
         const meta = await openaiFetch(`/files/${f.id}`);
         out.push({ id: f.id, status: f.status, filename: meta?.filename || "" });
@@ -164,6 +166,72 @@ async function upsertAssistant({ existingAssistantId, model, name, instructions,
   }
 }
 
+/* ===== CSV Export (교과별) ===== */
+function yyyymmdd(d){
+  const z = n => String(n).padStart(2,"0");
+  return `${d.getFullYear()}-${z(d.getMonth()+1)}-${z(d.getDate())}`;
+}
+
+async function exportSubjectCSV({ subject, teacherUid, startDate, endDate }) {
+  // conversations: where subject==, teacherUid==, createdAt in [start, end)
+  const convQ = query(
+    collection(db, "conversations"),
+    where("subject", "==", subject),
+    where("teacherUid", "==", teacherUid),
+    where("createdAt", ">=", Timestamp.fromDate(startDate)),
+    where("createdAt", "<", Timestamp.fromDate(endDate))
+  );
+
+  const convSnap = await getDocs(convQ);
+  const rows = [];
+
+  for (const conv of convSnap.docs) {
+    const c = conv.data();
+    // messages 하위 수집
+    const msgsSnap = await getDocs(collection(db, `conversations/${conv.id}/messages`));
+    msgsSnap.forEach(m => {
+      const d = m.data();
+      rows.push({
+        conversationId: conv.id,
+        subject: c.subject || "",
+        assistantId: c.assistantId || "",
+        teacherUid: c.teacherUid || "",
+        studentNickname: c.studentNickname || "",
+        createdAtConvKST: c.createdAt?.toDate?.()
+          ? c.createdAt.toDate().toLocaleString("ko-KR", { timeZone: "Asia/Seoul" })
+          : "",
+        role: d.role || "",
+        content: String(d.content ?? "").replace(/\s+/g, " ").trim(),
+        createdAtMsgKST: d.createdAt?.toDate?.()
+          ? d.createdAt.toDate().toLocaleString("ko-KR", { timeZone: "Asia/Seoul" })
+          : ""
+      });
+    });
+  }
+
+  const headers = Object.keys(rows[0] || {
+    conversationId:"",subject:"",assistantId:"",teacherUid:"",studentNickname:"",
+    createdAtConvKST:"",role:"",content:"",createdAtMsgKST:""
+  });
+
+  const csv = [headers.join(",")]
+    .concat(rows.map(r => headers.map(h => {
+      const cell = String(r[h] ?? "");
+      return `"${cell.replace(/"/g,'""')}"`;
+    }).join(",")))
+    .join("\n");
+
+  const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
+  const fname = `export_${subject}_${yyyymmdd(startDate)}_${yyyymmdd(endDate)}.csv`;
+  const url = URL.createObjectURL(blob);
+  const a = Object.assign(document.createElement("a"), { href: url, download: fname });
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+  toast("📄 CSV 내보내기 완료");
+}
+
 /* ===== 메인 ===== */
 onAuthStateChanged(auth, async (user) => {
   if (!user) {
@@ -188,7 +256,7 @@ onAuthStateChanged(auth, async (user) => {
     });
 
     listContainer.innerHTML = docs.length ? "" : "<p>요청한 챗봇이 없습니다.</p>";
-    docs.forEach((docSnap) => renderCard(docSnap));
+    docs.forEach((docSnap) => renderCard(docSnap, user));
 
   } catch (err) {
     console.error(err);
@@ -198,7 +266,7 @@ onAuthStateChanged(auth, async (user) => {
   }
 });
 
-function renderCard(docSnap){
+function renderCard(docSnap, user){
   const data = docSnap.data();
   const card = document.createElement("div");
   card.className = "chatbot-card";
@@ -251,6 +319,7 @@ function renderCard(docSnap){
     <div class="card-buttons">
       <button class="create-btn">${data.assistantId ? "다시 생성/업데이트" : "생성"}</button>
       <button class="student-btn" ${data.assistantId ? "" : "disabled title='먼저 생성하세요'"}>학생용 링크</button>
+      <button class="export-btn">CSV 내보내기</button>
       <button class="edit-btn">수정</button>
       <button class="delete-btn">삭제</button>
     </div>
@@ -258,16 +327,51 @@ function renderCard(docSnap){
 
   const createBtn  = card.querySelector(".create-btn");
   const studentBtn = card.querySelector(".student-btn");
+  const exportBtn  = card.querySelector(".export-btn");
 
+  // ✅ 학생용 링크: teacherUid/assistantId 동시 전달 (StudentChat이 메타를 바로 저장 가능)
   studentBtn.addEventListener("click", () => {
     if (!data.assistantId) return;
     const params = new URLSearchParams({
+      // 호환성: 두 키 모두 전달
       assistant: data.assistantId,
+      assistantId: data.assistantId,
       name: name || "학생용 챗봇",
       subject: subject || "",
-      model: String(modelDisplay || "")
+      model: String(modelDisplay || ""),
+      teacherUid: data.ownerUid || data.uid || user.uid || ""
     });
     window.open(`StudentChat.html?${params.toString()}`, "_blank", "noopener");
+  });
+
+  // ✅ 교과별 CSV 내보내기 (기간 필터 간단 프롬프트)
+  exportBtn.addEventListener("click", async () => {
+    try {
+      if (!subject || subject === "(교과 없음)") {
+        alert("교과 정보가 없어 CSV를 생성할 수 없습니다.");
+        return;
+      }
+      const defaultStart = new Date();
+      defaultStart.setDate(defaultStart.getDate() - 7);
+      const startStr = prompt("시작 날짜(YYYY-MM-DD)", yyyymmdd(defaultStart));
+      if (!startStr) return;
+      const endStr = prompt("종료 날짜(YYYY-MM-DD, *해당 일자 제외 상한*)", yyyymmdd(new Date()));
+      if (!endStr) return;
+
+      // 로컬 타임 기준으로 하루 경계 정의(Asia/Seoul 고려는 서버/쿼리 단계에서 Timestamp로 고정)
+      const startDate = new Date(`${startStr}T00:00:00`);
+      const endDate = new Date(`${endStr}T00:00:00`);
+
+      toast("CSV 생성 중…");
+      await exportSubjectCSV({
+        subject,
+        teacherUid: data.ownerUid || data.uid || user.uid || "",
+        startDate, endDate
+      });
+    } catch (e) {
+      console.error(e);
+      alert("CSV 생성 실패: " + (e?.message || e));
+    }
   });
 
   createBtn.addEventListener("click", async () => {
@@ -300,6 +404,7 @@ function renderCard(docSnap){
         let newlyOk = 0;
         const pendingFiles = [];
 
+        const ragList = normalizeRagFiles(data);
         for (let i = 0; i < ragList.length; i++) {
           const m = ragList[i];
           const filename = m?.name || `document_${i+1}.pdf`;
@@ -311,7 +416,7 @@ function renderCard(docSnap){
               if (f.status !== "completed") {
                 await waitIndexed(vectorStoreId, f.id, { timeoutMs: 600000, intervalMs: 3000 });
               }
-              newlyOk++; // 이미 완료이거나 완료됨
+              newlyOk++;
             } catch (e) {
               console.warn("기존 파일 인덱싱 지연:", filename, e?.message);
               pendingFiles.push({ name: filename, fileId: f.id });
@@ -352,14 +457,13 @@ function renderCard(docSnap){
         });
       }
 
-      // ✅ FIX: RAG 안내 여부는 이번 클릭의 useRag로만 판단
+      // ✅ RAG 안내 여부는 이번 클릭의 useRag로만 판단
       const instructions = buildInstructions(description, !!useRag, useFewShot, examples);
 
       // 4) Assistant 업서트
       const assistant = await upsertAssistant({
         existingAssistantId: data.assistantId || null,
         model, name, instructions,
-        // ✅ FIX: 방금 생성/재사용한 vectorStoreId를 연결
         vectorStoreId: useRag ? vectorStoreId : null,
         chatbotDocId: docSnap.id
       });
@@ -369,7 +473,8 @@ function renderCard(docSnap){
         assistantId: assistant.id,
         assistantModelSnapshot: model,
         assistantCreatedAt: data.assistantCreatedAt || serverTimestamp(),
-        assistantUpdatedAt: serverTimestamp()
+        assistantUpdatedAt: serverTimestamp(),
+        ownerUid: data.ownerUid || user.uid // 누락 시 보강
       });
 
       toast("✅ 완료!");
@@ -386,7 +491,6 @@ function renderCard(docSnap){
       alert("생성/업데이트 실패: " + (e?.message || e));
       createBtn.textContent = data.assistantId ? "다시 생성/업데이트" : "생성";
     } finally {
-      clearTimeout(watchdog);
       createBtn.disabled = false;
     }
   });

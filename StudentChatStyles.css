@@ -41,8 +41,19 @@ body {
   opacity: 0.9;
   display: flex;
   gap: 8px;
+  align-items: center;
 }
 .right-actions { display: flex; gap: 8px; }
+
+/* 교사 뱃지 */
+.badge.teacher {
+  background: #00a16a;
+  color: #fff;
+  border-radius: 999px;
+  padding: 2px 8px;
+  font-size: 11px;
+  font-weight: 700;
+}
 
 /* 닉네임 바 */
 .nickname-bar {
@@ -61,7 +72,7 @@ body {
   padding: 8px 10px;
   border-radius: 10px;
   border: 1px solid #cdd6e1;
-  background: #fff;
+  background: #f2f4f8; /* 읽기 전용 느낌 */
   font-size: 14px;
 }
 
@@ -78,6 +89,36 @@ body {
 .btn.primary:hover { background: #0050aa; }
 .btn.ghost { background: #ffffff1a; color: #fff; }
 .btn.ghost:hover { background: #ffffff28; }
+
+/* 교사 전용 버튼 스타일 */
+.btn.success { background: #00a16a; color: #fff; }
+.btn.success:hover { background: #00b379; }
+
+/* 코드 패널 */
+.code-panel {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: #ffffff;
+  border: 1px dashed #b7e7d5;
+  color: #0a5b41;
+  padding: 10px;
+  border-radius: 12px;
+  margin: 10px 0;
+}
+.code-text {
+  flex: 1;
+  padding: 8px 10px;
+  border: 1px solid #cdd6e1;
+  border-radius: 10px;
+  background: #f8fffb;
+  font-weight: 700;
+  letter-spacing: 2px;
+}
+.code-panel .hint {
+  font-size: 12px;
+  opacity: 0.8;
+}
 
 /* 채팅창 */
 .chat-window {

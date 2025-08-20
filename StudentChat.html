@@ -16,18 +16,27 @@
         <h1 id="botTitle">학생용 챗봇</h1>
         <div class="subtitle">
           <span id="subjectLabel"></span>
-          <span id="modelLabel"></span>
+          <!-- 모델 표시는 제거됨 -->
         </div>
       </div>
       <div class="right-actions">
+        <!-- 교사 전용: 권한 있을 때만 표시 -->
+        <button id="issueCodeBtn" class="btn success" style="display:none;">코드 발급</button>
         <button id="resetThreadBtn" class="btn ghost">새로 시작</button>
       </div>
     </div>
 
+    <!-- 교사 전용: 발급된 코드 패널 -->
+    <div id="codePanel" class="code-panel" style="display:none;">
+      <input id="codeText" class="code-text" type="text" readonly placeholder="발급된 코드가 여기에 표시됩니다." />
+      <button id="copyCodeBtn" class="btn small">복사</button>
+      <span class="hint">24시간 유효</span>
+    </div>
+
     <div class="nickname-bar">
       <label for="nicknameInput">닉네임</label>
-      <input id="nicknameInput" type="text" maxlength="20" placeholder="예: 과학짱"/>
-      <button id="saveNickBtn" class="btn small">저장</button>
+      <!-- 이 페이지에서는 읽기 전용: StudentLogin.html에서만 수정 -->
+      <input id="nicknameInput" type="text" maxlength="20" placeholder="예: 과학짱" readonly />
     </div>
 
     <div id="chatWindow" class="chat-window"></div>

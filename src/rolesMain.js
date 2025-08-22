@@ -10,7 +10,8 @@ export const TEACHER_EMAILS = [
   "escherr1@snu.ac.kr", 
   "gaegullll@gmail.com", 
   "whdusgml0806@gmail.com",
-  "jsp4898@snu.ac.kr", 
+  "jsp4898@snu.ac.kr",
+  "wkdgjsdud00@gmail.com", 
 ];
 
 export const ADMIN_EMAILS = [

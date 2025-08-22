@@ -26,9 +26,16 @@ dist-ssr
 
 .env
 
-teacher.csv
+teachers.csv
 
 # service account keys
 keys/
+*.secret.json
+firebase-admin.json
+
+# secrets
+functions/keys/
+*.env
+.env
 *.secret.json
 firebase-admin.json

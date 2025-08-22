@@ -146,7 +146,7 @@ function convKey(aid, nickname) { return `conv:${aid}:${nickname || "guest"}`; }
 
 let assistantId = null;
 let chatbotDocId = null;
-let teacherUid = null;
+let teacherUid = null;     // (보존용) 챗봇 소유자 UID가 있을 수 있음
 let subjectStr = "";
 let modelStr = ""; // UI 미표시
 let conversationId = null;
@@ -287,97 +287,55 @@ async function sendMessageFlow(text) {
   }
 }
 
-/* ===== 이벤트 ===== */
-composer.addEventListener("submit", async (e) => {
-  e.preventDefault();
-  const text = (userMessageEl.value || "").trim();
-  if (!text) return;
-
-  renderBubble("user", text);
-  userMessageEl.value = "";
-  setSending(true);
-  try {
-    await sendMessageFlow(text);
-  } catch (err) {
-    console.error(err);
-    const msg = `❌ 오류: ${err?.message || err}`;
-    renderBubble("assistant", msg);
-    await logMessage("system", msg);
-  } finally {
-    setSending(false);
-  }
-});
-userMessageEl.addEventListener("keydown", (e) => {
-  if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); sendBtn.click(); }
-});
-resetThreadBtn.addEventListener("click", async () => {
-  if (!assistantId) return;
-  const nickname = nickInput.value.trim() || "손님";
-  if (!confirm("대화를 처음부터 다시 시작할까요?")) return;
-  resetThread(assistantId, nickname);
-  chatWindow.innerHTML = "";
-  renderBubble("assistant", "새 대화를 시작했어요. 무엇이든 물어보세요!");
-});
-
 /* ===== 교사 권한 체크 & 코드 발급 ===== */
-// ✅ 이메일 화이트리스트에 janghy0412@gmail.com 추가
 const ADMIN_EMAIL_WHITELIST = ["wkdgjsdud@snu.ac.kr", "janghy0412@gmail.com"];
 
-// 승인 판정 로직을 관대하게(여러 필드 지원)
+/** 커스텀 클레임 전파 대기(최대 maxMs, 지수 백오프) */
+async function waitClaimsPropagation(user, maxMs = 15000) {
+  if (!user) return null;
+  const started = Date.now();
+  let delay = 500;
+  let lastClaims = null;
+  while (Date.now() - started < maxMs) {
+    try {
+      await user.getIdToken(true);
+      const r = await user.getIdTokenResult();
+      lastClaims = r?.claims || null;
+      if (lastClaims?.teacher === true || lastClaims?.admin === true) return lastClaims;
+    } catch (e) { /* noop */ }
+    await sleep(delay);
+    delay = Math.min(delay * 1.6, 2500);
+  }
+  return lastClaims;
+}
+
 async function isTeacherAuthorized(user) {
-  console.debug("[auth] teacherAuth.currentUser:", user?.email || null);
   if (!user) return false;
+  if (user.email && ADMIN_EMAIL_WHITELIST.includes(user.email)) return true;
 
-  if (user.email && ADMIN_EMAIL_WHITELIST.includes(user.email)) {
-    console.debug("[auth] whitelist matched");
-    return true;
-  }
-
-  // Custom Claims
   try {
-    const token = await user.getIdTokenResult();
-    console.debug("[auth] claims:", token?.claims);
-    if (token?.claims?.teacher === true) return true;
-    if (token?.claims?.admin === true) return true;
-  } catch (e) {
-    console.debug("[auth] getIdTokenResult error", e?.message);
-  }
+    let token = await user.getIdTokenResult();
+    if (token?.claims?.teacher === true || token?.claims?.admin === true) return true;
 
-  // teachers/{uid} 문서
-  try {
-    const tSnap = await getDoc(doc(dbPrimary, "teachers", user.uid));
-    if (tSnap.exists()) {
-      const t = tSnap.data() || {};
-      console.debug("[auth] teachers doc:", t);
-
-      // 가능한 필드들을 모두 허용 방향으로 체크
-      const positive =
-        t.enabled === true ||
-        t.approved === true ||
-        t.active === true ||
-        t.isActive === true ||
-        t.role === "teacher" ||
-        t.role === "admin";
-
-      const explicitlyDisabled = t.enabled === false || t.disabled === true;
-
-      if (positive) return true;
-      if (explicitlyDisabled) return false;
-
-      // 문서가 존재하고 명시적 비활성화가 아니면 승인으로 간주(버튼 표시 용도)
-      return true;
-    } else {
-      console.debug("[auth] teachers doc not found");
-    }
-  } catch (e) {
-    console.debug("[auth] read teachers doc error:", e?.message);
-  }
-
+    // teachers 문서가 긍정적이면 전파 대기 후 재확인
+    try {
+      const tSnap = await getDoc(doc(dbPrimary, "teachers", user.uid));
+      if (tSnap.exists()) {
+        const t = tSnap.data() || {};
+        const positive =
+          t.enabled === true || t.approved === true || t.active === true ||
+          t.isActive === true || t.role === "teacher" || t.role === "admin";
+        if (positive) {
+          const claims = await waitClaimsPropagation(user, 15000);
+          if (claims?.teacher === true || claims?.admin === true) return true;
+        }
+      }
+    } catch {}
+  } catch {}
   return false;
 }
 
 function toggleTeacherUI(isTeacher) {
-  console.debug("[auth] toggleTeacherUI:", isTeacher);
   if (isTeacher) {
     issueCodeBtn.style.display = "inline-block";
     let badge = document.getElementById("teacherBadge");
@@ -417,12 +375,17 @@ async function createUniqueCode() {
   }
   throw new Error("코드 생성에 실패했습니다. 잠시 후 다시 시도해 주세요.");
 }
+
 async function generateAccessCode() {
   const u = teacherAuth.currentUser;
   if (!u) { alert("교사 계정으로 로그인해 주세요."); return; }
 
-  if (!(await isTeacherAuthorized(u))) {
-    alert("코드 발급 권한이 없습니다.");
+  // 생성 직전 토큰 리프레시/전파 대기
+  await waitClaimsPropagation(u, 3000);
+  const finalToken = await u.getIdTokenResult();
+  const hasTeacher = finalToken?.claims?.teacher === true || finalToken?.claims?.admin === true;
+  if (!hasTeacher) {
+    alert("코드 발급 권한이 없습니다. (권한 반영까지 시간이 걸릴 수 있습니다. 새로고침 후 재시도)");
     return;
   }
 
@@ -430,16 +393,20 @@ async function generateAccessCode() {
   const now = new Date();
   const expires = new Date(now.getTime() + 24 * 60 * 60 * 1000); // 24시간
 
-  await addDoc(collection(dbPrimary, "access_codes"), {
+  // ✅ 규칙에 맞춘 8개 필드만 저장 (teacherUid는 현재 로그인 UID)
+  const payload = {
     code,
     active: true,
     assistantId: assistantId || "",
     chatbotDocId: chatbotDocId || "",
-    teacherUid: teacherUid || u.uid,
+    teacherUid: u.uid,
     teacherEmail: u.email || "",
     createdAt: serverTimestamp(),
     expiresAt: expires
-  });
+  };
+
+  const ref = await addDoc(collection(dbPrimary, "access_codes"), payload);
+  console.debug("[code] saved at access_codes docId:", ref.id);
 
   codeText.value = code;
   codePanel.style.display = "flex";
@@ -451,14 +418,14 @@ async function generateAccessCode() {
   }
 }
 
-// 로그인 상태 변화 감지
+/* ===== 로그인 상태 변화 감지 & 권한 UI 반영 ===== */
 onAuthStateChanged(teacherAuth, async (user) => {
-  console.debug("[auth] onAuthStateChanged user:", user?.email || null);
+  if (user) await waitClaimsPropagation(user, 15000);
   const ok = await isTeacherAuthorized(user);
   toggleTeacherUI(ok);
 });
 
-// 버튼 동작
+/* ===== 버튼 동작 ===== */
 issueCodeBtn?.addEventListener("click", async () => {
   issueCodeBtn.disabled = true;
   try { await generateAccessCode(); }
@@ -471,6 +438,36 @@ copyCodeBtn?.addEventListener("click", async () => {
   try { await navigator.clipboard.writeText(v); renderBubble("assistant", "코드를 클립보드에 복사했어요."); }
   catch { alert("복사에 실패했습니다. 수동으로 복사해 주세요."); }
 });
+
+/* ===== 디버그 헬퍼(브라우저 콘솔에서 사용) ===== */
+window.__whoami = async () => {
+  try {
+    const u = teacherAuth.currentUser;
+    await u?.getIdToken(true);
+    const r = await u?.getIdTokenResult();
+    console.log({
+      role: "teacherAuth([DEFAULT])",
+      uid: u?.uid || null,
+      email: u?.email || null,
+      isAnonymous: u?.isAnonymous || false,
+      claims: r?.claims || null,
+    });
+  } catch (e) { console.error(e); }
+};
+window.__whoamiStudent = async () => {
+  try {
+    const u = auth.currentUser;
+    await u?.getIdToken(true);
+    const r = await u?.getIdTokenResult();
+    console.log({
+      role: "studentAuth(student-app)",
+      uid: u?.uid || null,
+      email: u?.email || null,
+      isAnonymous: u?.isAnonymous || false,
+      claims: r?.claims || null,
+    });
+  } catch (e) { console.error(e); }
+};
 
 /* ===== Init ===== */
 (async function init() {

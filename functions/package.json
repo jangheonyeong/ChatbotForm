@@ -4,6 +4,8 @@
   "type": "module",
   "engines": { "node": "20" },
   "scripts": {
+    "preapprove": "node tools/bulk-set-teachers.mjs preapproved.csv preapprove",
+    "apply-now": "node tools/bulk-set-teachers.mjs preapproved.csv apply-now",
     "bulk:teachers": "node tools/bulk-set-teachers.mjs",
     "deploy": "firebase deploy --only functions",
     "emulate": "firebase emulators:start --only functions"

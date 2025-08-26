@@ -1,17 +1,28 @@
-// 학생 시작 페이지: 닉네임 입력/저장 후 지정한 Assistants 챗봇으로 이동
+// 저장 키
 const NICK_KEY = "guestNickname";
-const ID_KEY = "guestId";
-const MAX_LEN = 20;
+const ID_KEY   = "guestId";
+const ASST_KEY = "studentAssistantId"; // (있으면 같이 전달)
+const CODE_KEY = "classCode";
+const MAX_LEN  = 20;
 
 const $ = (s) => document.querySelector(s);
-const nicknameEl = $("#nickname");
-const assistantIdEl = $("#assistantId");
-const saveBtn = $("#saveBtn");
-const startBtn = $("#startBtn");
-const resetBtn = $("#resetBtn");
-const nickStatusEl = $("#nickStatus");
 
-// 간단 랜덤 guestId 생성
+// 상단 닉네임 표시/수정
+const nickBadge    = $("#nickBadge");
+const editNickBtn  = $("#editNickBtn");
+
+// 교사 코드
+const classCodeInput = $("#classCodeInput");
+
+// 시작 버튼
+const startBtn = $("#startBtn");
+
+// 닉네임 오버레이
+const nickOverlay    = $("#nickOverlay");
+const nickModalInput = $("#nickModalInput");
+const nickModalSave  = $("#nickModalSave");
+
+/* ---------- 유틸 ---------- */
 function ensureGuestId() {
   let id = localStorage.getItem(ID_KEY);
   if (!id) {
@@ -21,13 +32,10 @@ function ensureGuestId() {
   }
   return id;
 }
-
 function loadNickname() {
   const nick = (localStorage.getItem(NICK_KEY) || "").trim();
-  if (!nick) return "";
-  return nick.slice(0, MAX_LEN);
+  return nick ? nick.slice(0, MAX_LEN) : "";
 }
-
 function saveNickname(nick) {
   const cleaned = (nick || "").replace(/\s+/g, " ").trim().slice(0, MAX_LEN);
   if (!cleaned) throw new Error("닉네임을 입력해주세요.");
@@ -35,100 +43,116 @@ function saveNickname(nick) {
   ensureGuestId();
   return cleaned;
 }
-
-// asst_ 로 시작하는 OpenAI Assistants ID 형태만 허용
+function refreshNickUI() {
+  const saved = loadNickname();
+  nickBadge.textContent = saved ? saved : "닉네임 설정 필요";
+}
+function getQueryParam(name) {
+  const u = new URL(window.location.href);
+  return u.searchParams.get(name);
+}
+function normalizeCode(code) {
+  return (code || "").trim().toUpperCase();
+}
+// 영문 대/소문자, 숫자, 하이픈 4~24자 (선호 형식에 맞춰 조정 가능)
+function isValidClassCode(code) {
+  return /^[A-Z0-9-]{4,24}$/.test(code);
+}
 function isValidAssistantId(id) {
   return /^asst_[A-Za-z0-9]+$/.test((id || "").trim());
 }
 
-// 학생용 챗봇 페이지로 이동 (필요 시 파일명만 교체하세요)
-function gotoAssistant(asstId) {
-  const target = `StudentChat.html?assistant=${encodeURIComponent(asstId)}`;
-  window.location.href = target;
-}
-
-// 상태 라벨 업데이트
-function updateNickStatus() {
-  const saved = loadNickname();
-  if (saved) {
-    nickStatusEl.textContent = `저장됨: ${saved}`;
-  } else {
-    nickStatusEl.textContent = "";
+/* 이동: code는 필수, assistant는 있으면 함께 */
+function gotoChatWith(code, maybeAsst) {
+  const params = new URLSearchParams();
+  params.set("code", code);
+  if (maybeAsst && isValidAssistantId(maybeAsst)) {
+    params.set("assistant", maybeAsst);
   }
+  window.location.href = `StudentChat.html?${params.toString()}`;
 }
 
+/* ---------- 초기화 ---------- */
 function init() {
-  // 기존 저장값을 입력칸에 프리필(편집 가능)
+  // assistant: URL → localStorage (UI에 노출하지 않음)
+  const fromUrl = getQueryParam("assistant");
+  const savedAsst = localStorage.getItem(ASST_KEY) || "";
+  if (fromUrl && isValidAssistantId(fromUrl)) {
+    localStorage.setItem(ASST_KEY, fromUrl);
+  } else if (savedAsst) {
+    // 그대로 보존
+  }
+
+  // 코드 프리필
+  const savedCode = localStorage.getItem(CODE_KEY) || "";
+  if (savedCode) classCodeInput.value = savedCode;
+
+  // 닉네임 상태/오버레이
   const existing = loadNickname();
-  if (existing) nicknameEl.value = existing;
-  updateNickStatus();
+  refreshNickUI();
+  if (!existing) openNickOverlay();
 
-  // 길이 제한
-  nicknameEl.addEventListener("input", () => {
-    if (nicknameEl.value.length > MAX_LEN) {
-      nicknameEl.value = nicknameEl.value.slice(0, MAX_LEN);
+  // 코드 입력창에서 Enter → 바로 시작
+  classCodeInput.addEventListener("keydown", (e) => {
+    if (e.key === "Enter") {
+      e.preventDefault();
+      startBtn.click();
     }
   });
 
-  // 닉네임 저장(항상 덮어쓰기 가능)
-  saveBtn.addEventListener("click", () => {
-    try {
-      const saved = saveNickname(nicknameEl.value);
-      nicknameEl.value = saved; // 정규화된 값 반영
-      updateNickStatus();
-      alert(`닉네임이 저장되었습니다: ${saved}`);
-    } catch (e) {
-      alert(e.message || e);
-    }
-  });
-
-  // 이 챗봇으로 시작: 닉네임 확인 → 저장 → Assistants로 이동
+  // 시작 버튼: 닉네임 확인 → 코드 검증/저장 → 이동
   startBtn.addEventListener("click", () => {
     try {
-      const asstId = (assistantIdEl.value || "").trim();
-      if (!isValidAssistantId(asstId)) {
-        alert("올바른 Assistants ID를 입력하세요. (예: asst_로 시작)");
-        assistantIdEl.focus();
+      const nick = loadNickname();
+      if (!nick) { openNickOverlay(); return; }
+
+      const normalized = normalizeCode(classCodeInput.value);
+      if (!isValidClassCode(normalized)) {
+        alert("교사 코드를 확인해주세요.");
+        classCodeInput.focus();
         return;
       }
-      const nickInput = (nicknameEl.value || "").trim();
-      if (!nickInput) {
-        alert("닉네임을 입력한 뒤 시작하세요.");
-        nicknameEl.focus();
-        return;
-      }
-      // 저장하고 이동
-      const saved = saveNickname(nickInput);
-      nicknameEl.value = saved;
-      updateNickStatus();
-      gotoAssistant(asstId);
+      localStorage.setItem(CODE_KEY, normalized);
+
+      const asst = localStorage.getItem(ASST_KEY) || getQueryParam("assistant") || "";
+      gotoChatWith(normalized, asst);
     } catch (e) {
       alert(e.message || e);
     }
   });
 
-  // 닉네임 초기화
-  resetBtn.addEventListener("click", () => {
-    localStorage.removeItem(NICK_KEY);
-    localStorage.removeItem(ID_KEY);
-    nicknameEl.value = "";
-    updateNickStatus();
-    nicknameEl.focus();
-  });
+  // 상단 닉네임 수정
+  editNickBtn.addEventListener("click", openNickOverlay);
 
-  // Enter로 바로 시작 (Assistant ID가 채워져 있어야 함)
-  nicknameEl.addEventListener("keydown", (e) => {
-    if (e.key === "Enter") {
-      e.preventDefault();
-      startBtn.click();
+  // 오버레이 저장
+  nickModalSave.addEventListener("click", () => {
+    try {
+      saveNickname(nickModalInput.value);
+      refreshNickUI();
+      closeNickOverlay();
+    } catch (e) {
+      alert(e.message || e);
+      nickModalInput.focus();
     }
   });
-  assistantIdEl.addEventListener("keydown", (e) => {
+  nickModalInput.addEventListener("keydown", (e) => {
     if (e.key === "Enter") {
       e.preventDefault();
-      startBtn.click();
+      nickModalSave.click();
     }
   });
+}
+
+/* ---------- 오버레이 ---------- */
+function openNickOverlay() {
+  nickModalInput.value = loadNickname() || "";
+  nickOverlay.classList.add("open");
+  nickOverlay.setAttribute("aria-hidden", "false");
+  setTimeout(() => nickModalInput.focus(), 0);
+}
+function closeNickOverlay() {
+  nickOverlay.classList.remove("open");
+  nickOverlay.setAttribute("aria-hidden", "true");
 }
 
 init();

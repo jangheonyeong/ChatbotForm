@@ -8,37 +8,36 @@
 </head>
 <body>
   <div class="container">
+    <!-- 상단바: 홈 + 타이틀 + 닉네임 표시/수정 -->
     <div class="topbar">
-      <a href="index.html" class="home-btn" title="처음으로">
-        <img src="https://img.icons8.com/ios-filled/24/ffffff/home.png" alt="홈" />
-      </a>
-      <h1>학생 접속</h1>
+      <div class="left-wrap">
+        <a href="index.html" class="home-btn" title="처음으로">
+          <img src="https://img.icons8.com/ios-filled/24/ffffff/home.png" alt="홈" />
+        </a>
+        <h1>학생 접속</h1>
+        <span id="nickBadge" class="nick-badge" title="현재 닉네임">닉네임 설정 필요</span>
+        <button id="editNickBtn" class="edit-btn" title="닉네임 수정" aria-label="닉네임 수정">✏️ 수정</button>
+      </div>
       <div class="spacer"></div>
     </div>
 
+    <!-- 본문 카드: 교사 코드만 표시 -->
     <div class="card">
-      <p class="subtitle">
-        닉네임은 <strong>이 브라우저에 저장</strong>되며 <strong>언제든 수정</strong>할 수 있어요.
-      </p>
+      <label for="classCodeInput" class="label code-label">교사 코드</label>
+      <input id="classCodeInput" class="input" type="text" placeholder="예: 6자리 또는 영문-숫자" maxlength="24" />
+      <button id="startBtn" class="btn primary block">이 챗봇으로 시작</button>
+    </div>
+  </div>
 
-      <label for="nickname" class="label">닉네임</label>
-      <input id="nickname" class="input" type="text" placeholder="예: 과학짱" maxlength="20" />
-      <p id="nickStatus" class="tiny"></p>
-
-      <div class="divider"></div>
-
-      <label for="assistantId" class="label">Assistants ID</label>
-      <input id="assistantId" class="input mono" type="text" placeholder="예: asst_dyIpwwEGjPED0etv4G4wajIe" />
-
+  <!-- 닉네임 먼저 설정 오버레이 -->
+  <div id="nickOverlay" class="overlay" aria-hidden="true">
+    <div class="modal" role="dialog" aria-modal="true" aria-labelledby="nickModalTitle">
+      <h2 id="nickModalTitle">닉네임 설정</h2>
+      <p class="tiny">대화에 표시될 이름입니다. 브라우저에만 저장돼요.</p>
+      <input id="nickModalInput" class="input" type="text" placeholder="예: 과학짱" maxlength="20" />
       <div class="row">
-        <button id="saveBtn" class="btn ghost">닉네임 저장</button>
-        <button id="startBtn" class="btn primary">이 챗봇으로 시작</button>
+        <button id="nickModalSave" class="btn primary">저장</button>
       </div>
-
-      <p class="tiny">
-        문제가 있나요?
-        <button id="resetBtn" class="link">닉네임 초기화</button>
-      </p>
     </div>
   </div>
 

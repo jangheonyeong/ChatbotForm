@@ -24,7 +24,8 @@ export default defineConfig({
         Physics: resolve(__dirname, 'Physics.html'),
         Geography: resolve(__dirname, 'Geography.html'),
         Biology: resolve(__dirname, 'Biology.html'),
-        StudentLogin: resolve(__dirname, 'StudentLogin.html')
+        StudentLogin: resolve(__dirname, 'StudentLogin.html'),
+        StudentChat: resolve(__dirname, 'StudentChat.html'),
       },
     },
   },

@@ -68,7 +68,7 @@ h2 {
 .chatbot-card {
   background-color: white;
   border-radius: 12px;
-  padding: 20px;
+  padding: 24px 20px 20px; /* ↑ 상단 여백 살짝 늘려 우측 상단 버튼과 간섭 방지 */
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
   display: flex;
   flex-direction: column;
@@ -128,6 +128,7 @@ textarea.editable {
   margin-top: 16px;
 }
 
+/* 기본 버튼들 */
 .edit-btn,
 .save-btn,
 .delete-btn,
@@ -154,7 +155,7 @@ textarea.editable {
   color: white;
 }
 
-/* ▼ 생성 버튼 복구 */
+/* ▼ 생성 버튼 */
 .create-btn {
   background-color: #6b5bff;
   color: #fff;
@@ -163,6 +164,7 @@ textarea.editable {
   background-color: #5548e6;
 }
 
+/* 기존 숨김 처리 */
 button.hidden,
 input.hidden,
 .few-container.hidden,
@@ -170,6 +172,7 @@ input.hidden,
   display: none;
 }
 
+/* 체크박스 */
 input[type="checkbox"] {
   accent-color: #003478;
   transform: scale(1.2);
@@ -222,4 +225,158 @@ input[type="file"] {
 
 strong {
   font-weight: 600;
+}
+
+/* =========================
+   🎨 새 디자인: 학생용 링크 / 대화 출력
+   ========================= */
+
+/* 학생용 링크: 아웃라인형, pill */
+.student-btn {
+  background: #ffffff;
+  color: #003478;
+  border: 1.5px solid #e5eaf1;
+  border-radius: 999px;
+  padding: 8px 12px;
+  font-weight: 600;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
+  transition: transform 0.12s ease, box-shadow 0.12s ease, background 0.12s ease, border-color 0.12s ease;
+}
+
+.student-btn:hover {
+  background: #eaf1ff;
+  border-color: #c4d5ff;
+  transform: translateY(-1px);
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.08);
+}
+
+.student-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* 대화 출력(구 CSV 내보내기): 카드 우측 상단 고정 + 가벼운 pill */
+.export-btn {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  background: #f1f5f9;
+  color: #0b1c3f;
+  border: 1px solid #e5eaf1;
+  border-radius: 999px;
+  padding: 7px 12px;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+  transition: transform 0.12s ease, box-shadow 0.12s ease, background 0.12s ease, border-color 0.12s ease;
+  z-index: 1;
+}
+
+.export-btn:hover {
+  background: #eaf1ff;
+  border-color: #c4d5ff;
+  transform: translateY(-1px);
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.1);
+}
+
+.export-btn::before {
+  content: "📄";
+  margin-right: 6px;
+  font-size: 14px;
+  line-height: 1;
+}
+
+/* =========================
+   🗓️ 달력 모달 (date picker)
+   ========================= */
+.overlay {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0,0,0,.35);
+  z-index: 9999;
+  padding: 16px;
+}
+
+.modal {
+  background: #fff;
+  border-radius: 12px;
+  width: min(480px, 92vw);
+  box-shadow: 0 12px 32px rgba(0,0,0,.18);
+  padding: 20px 20px 16px;
+}
+
+.modal h3 {
+  margin: 0 0 8px;
+  color: #0b1c3f;
+  font-size: 18px;
+}
+
+.modal .note {
+  margin: 0 0 12px;
+  color: #6b7280;
+  font-size: 13px;
+}
+
+.date-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  margin-top: 8px;
+}
+
+.date-grid label {
+  display: flex;
+  flex-direction: column;
+  font-size: 13px;
+  color: #0b1c3f;
+  gap: 6px;
+}
+
+.date-grid input[type="date"] {
+  padding: 8px 10px;
+  border: 1px solid #e5eaf1;
+  border-radius: 8px;
+  font-size: 14px;
+}
+
+.modal .error {
+  margin-top: 8px;
+  color: #c0392b;
+  font-size: 13px;
+  min-height: 18px;
+}
+
+.modal .buttons {
+  margin-top: 14px;
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.modal .btn {
+  padding: 8px 12px;
+  font-size: 14px;
+  border-radius: 8px;
+  border: 1px solid #e5eaf1;
+  cursor: pointer;
+  background: #fff;
+}
+
+.modal .btn:hover {
+  background: #f6f9ff;
+}
+
+.modal .btn-primary {
+  background: #003478;
+  color: #fff;
+  border-color: #003478;
+}
+
+.modal .btn-primary:hover {
+  background: #0050aa;
+  border-color: #0050aa;
 }

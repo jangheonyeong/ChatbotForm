@@ -4,7 +4,16 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>챗봇 요청 목록</title>
+
   <link rel="stylesheet" href="ChatbotListStyles.css" />
+
+  <!-- 🔧 모지바케(ðŸ˜„,,) 방지용: 버튼 이모지 코드포인트로 재정의 -->
+  <style>
+    /* 대화 출력 버튼 앞 아이콘을 코드포인트로 고정 (📄, U+1F4C4) */
+    .export-btn::before { content: "\01F4C4 "; }
+    /* 혹시 외부 CSS가 콤마(,)를 붙였다면 제거되도록 보장 */
+    .export-btn::after  { content: ""; }
+  </style>
 </head>
 <body>
   <div class="list-container">

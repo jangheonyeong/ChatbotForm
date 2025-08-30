@@ -1,18 +1,21 @@
-// [src/ChatbotListMain.js] — 내 문서만 목록 + Assistant 생성/업데이트 + RAG 인덱싱
+// [src/ChatbotListMain.js] — 내 문서만 목록 + Assistant 생성/업데이트 + RAG 인덱싱 + 🗓️ 날짜 선택 모달
 // ✅ 변경 핵심
-// 1) 각 카드에 "CSV 내보내기" 버튼 추가(교과(subject) 기준 + 기간 필터)
-// 2) 학생용 링크에 teacherUid와 assistantId 파라미터 포함(로깅 신뢰성 ↑)
+// - 학생용 링크에 항상 ?id=<문서ID> 포함 (StudentChat이 최신 assistantId로 덮어쓰게)
+// - 업서트 성공 후 data.assistantId 를 최신 assistant.id 로 갱신 (클릭 즉시 반영)
+// - UI 라벨 "CSV 내보내기" → "대화 출력", 버튼 스타일은 CSS에서 개선
+// - 대화 출력: student_conversations 기반으로 기간 내 메시지까지 포함해 추출 (KST 자정~자정 포함)
+// - 🗓️ NEW: "대화 출력" 클릭 시 달력 모달에서 날짜를 선택(종료일 포함)
 
-import { initializeApp } from "firebase/app";
+import { initializeApp, getApps } from "firebase/app";
 import { getAuth, onAuthStateChanged } from "firebase/auth";
 import {
-  getFirestore, collection, query, where, getDocs, deleteDoc, doc, updateDoc, serverTimestamp, Timestamp
+  getFirestore, collection, query, where, getDocs, deleteDoc, doc, updateDoc, serverTimestamp, Timestamp, orderBy
 } from "firebase/firestore";
 import { getStorage, ref as sRef, getBlob, getBytes, deleteObject, getDownloadURL } from "firebase/storage";
 import { firebaseConfig } from "../firebaseConfig.js";
 
 /* ===== Firebase ===== */
-const app = initializeApp(firebaseConfig);
+const app = getApps()[0] || initializeApp(firebaseConfig); // ✅ 이미 초기화돼 있으면 재사용
 const auth = getAuth(app);
 const db = getFirestore(app);
 const storage = getStorage(app);
@@ -166,77 +169,198 @@ async function upsertAssistant({ existingAssistantId, model, name, instructions,
   }
 }
 
-/* ===== CSV Export (교과별) ===== */
+/* ===== CSV Export (student_conversations 기반) ===== */
 function yyyymmdd(d){
   const z = n => String(n).padStart(2,"0");
   return `${d.getFullYear()}-${z(d.getMonth()+1)}-${z(d.getDate())}`;
 }
 
-async function exportSubjectCSV({ subject, teacherUid, startDate, endDate }) {
-  // conversations: where subject==, teacherUid==, createdAt in [start, end)
-  const convQ = query(
-    collection(db, "conversations"),
-    where("subject", "==", subject),
-    where("teacherUid", "==", teacherUid),
-    where("createdAt", ">=", Timestamp.fromDate(startDate)),
-    where("createdAt", "<", Timestamp.fromDate(endDate))
-  );
+// KST 자정~자정(포함) 범위를 UTC 시간으로 변환
+function kstDayRangeInclusive(startY, startM, startD, endY, endM, endD) {
+  const startUtc = new Date(Date.UTC(startY, startM - 1, startD, 15, 0, 0, 0));     // KST 00:00
+  const endUtc   = new Date(Date.UTC(endY,   endM   - 1, endD, 14, 59, 59, 999));  // KST 23:59:59.999
+  return { startUtc, endUtc };
+}
 
+function tsToKSTString(ts) {
+  if (!ts) return "";
+  const date = ts?.toDate?.() ? ts.toDate() : (ts instanceof Date ? ts : null);
+  if (!date) return "";
+  const kst = new Date(date.getTime() + 9 * 60 * 60 * 1000);
+  const z = n => String(n).padStart(2,"0");
+  return `${kst.getFullYear()}-${z(kst.getMonth()+1)}-${z(kst.getDate())} ${z(kst.getHours())}:${z(kst.getMinutes())}:${z(kst.getSeconds())}`;
+}
+
+function toCSV(rows) {
+  const header = [
+    "conversationId","subject","assistantId","teacherUid","studentNickname",
+    "createdAtConvKST","role","content","createdAtMsgKST"
+  ];
+  const esc = s => `"${String(s ?? "").replace(/"/g, '""')}"`;
+  const lines = [header.join(",")];
+  for (const r of rows) {
+    lines.push([
+      esc(r.conversationId), esc(r.subject), esc(r.assistantId), esc(r.teacherUid),
+      esc(r.studentNickname), esc(r.createdAtConvKST), esc(r.role),
+      esc(r.content), esc(r.createdAtMsgKST)
+    ].join(","));
+  }
+  return lines.join("\r\n");
+}
+
+async function exportSubjectCSV_fromStudentConversations({
+  subject, teacherUid, startStr, endStr
+}) {
+  // 1) 날짜 파싱 → KST 종일 범위(포함) → UTC
+  const [sy, sm, sd] = startStr.split("-").map(Number);
+  const [ey, em, ed] = endStr.split("-").map(Number);
+  const { startUtc, endUtc } = kstDayRangeInclusive(sy, sm, sd, ey, em, ed);
+
+  // 2) 대화 목록 (교사+교과) 조회 — createdAt 범위는 메시지에서 필터링
+  const convQ = query(
+    collection(db, "student_conversations"),
+    where("teacherUid", "==", teacherUid),
+    where("subject", "==", subject)
+  );
   const convSnap = await getDocs(convQ);
+
   const rows = [];
 
-  for (const conv of convSnap.docs) {
-    const c = conv.data();
-    // messages 하위 수집
-    const msgsSnap = await getDocs(collection(db, `conversations/${conv.id}/messages`));
+  // 3) 각 대화의 messages 하위컬렉션을 기간 필터 + 시간순 정렬로 조회
+  for (const convDoc of convSnap.docs) {
+    const conv = convDoc.data();
+    const convId = convDoc.id;
+
+    const msgsQ = query(
+      collection(db, "student_conversations", convId, "messages"),
+      where("createdAt", ">=", Timestamp.fromDate(startUtc)),
+      where("createdAt", "<=", Timestamp.fromDate(endUtc)),
+      orderBy("createdAt", "asc")
+    );
+    const msgsSnap = await getDocs(msgsQ);
+
     msgsSnap.forEach(m => {
       const d = m.data();
       rows.push({
-        conversationId: conv.id,
-        subject: c.subject || "",
-        assistantId: c.assistantId || "",
-        teacherUid: c.teacherUid || "",
-        studentNickname: c.studentNickname || "",
-        createdAtConvKST: c.createdAt?.toDate?.()
-          ? c.createdAt.toDate().toLocaleString("ko-KR", { timeZone: "Asia/Seoul" })
-          : "",
+        conversationId: convId,
+        subject: conv.subject || "",
+        assistantId: conv.assistantId || "",
+        teacherUid: conv.teacherUid || "",
+        studentNickname: conv.studentNickname || "",
+        createdAtConvKST: tsToKSTString(conv.createdAt),
         role: d.role || "",
         content: String(d.content ?? "").replace(/\s+/g, " ").trim(),
-        createdAtMsgKST: d.createdAt?.toDate?.()
-          ? d.createdAt.toDate().toLocaleString("ko-KR", { timeZone: "Asia/Seoul" })
-          : ""
+        createdAtMsgKST: tsToKSTString(d.createdAt)
       });
     });
   }
 
-  const headers = Object.keys(rows[0] || {
-    conversationId:"",subject:"",assistantId:"",teacherUid:"",studentNickname:"",
-    createdAtConvKST:"",role:"",content:"",createdAtMsgKST:""
-  });
-
-  const csv = [headers.join(",")]
-    .concat(rows.map(r => headers.map(h => {
-      const cell = String(r[h] ?? "");
-      return `"${cell.replace(/"/g,'""')}"`;
-    }).join(",")))
-    .join("\n");
-
+  // 4) CSV 다운로드
+  const csv = toCSV(rows);
   const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
-  const fname = `export_${subject}_${yyyymmdd(startDate)}_${yyyymmdd(endDate)}.csv`;
+  const fname = `export_${subject}_${startStr}_${endStr}.csv`;
   const url = URL.createObjectURL(blob);
   const a = Object.assign(document.createElement("a"), { href: url, download: fname });
   document.body.appendChild(a);
   a.click();
   a.remove();
   URL.revokeObjectURL(url);
-  toast("📄 CSV 내보내기 완료");
+
+  if (rows.length === 0) {
+    console.warn("[대화 출력] 선택한 조건에서 메시지가 0건입니다. (규칙/필터/기간 확인)");
+  }
+}
+
+/* =========================
+   🗓️ 날짜 선택 모달 (달력 UI)
+   ========================= */
+function openDateRangeModal({ startStr, endStr }) {
+  return new Promise((resolve) => {
+    const overlay = document.createElement("div");
+    overlay.className = "overlay";
+    overlay.innerHTML = `
+      <div class="modal" role="dialog" aria-modal="true" aria-label="대화 출력 기간 선택">
+        <h3>대화 출력 기간 선택</h3>
+        <p class="note">KST(한국 표준시) 기준 • 종료일 포함 • 자정~자정</p>
+
+        <div class="date-grid">
+          <label>
+            시작일
+            <input type="date" id="startDate">
+          </label>
+          <label>
+            종료일
+            <input type="date" id="endDate">
+          </label>
+        </div>
+
+        <div class="error" id="dateError"></div>
+
+        <div class="buttons">
+          <button class="btn" id="cancelBtn">취소</button>
+          <button class="btn btn-primary" id="okBtn">CSV 내보내기</button>
+        </div>
+      </div>
+    `;
+    document.body.appendChild(overlay);
+
+    const startEl = overlay.querySelector("#startDate");
+    const endEl   = overlay.querySelector("#endDate");
+    const errEl   = overlay.querySelector("#dateError");
+    const cancel  = overlay.querySelector("#cancelBtn");
+    const ok      = overlay.querySelector("#okBtn");
+
+    // 기본값
+    startEl.value = startStr;
+    endEl.value = endStr;
+
+    // 포커스
+    setTimeout(() => startEl.focus(), 0);
+
+    function close(result) {
+      overlay.remove();
+      resolve(result);
+    }
+
+    function validate() {
+      const s = startEl.value;
+      const e = endEl.value;
+      if (!s || !e) {
+        errEl.textContent = "시작일과 종료일을 모두 선택하세요.";
+        return false;
+      }
+      const sd = new Date(`${s}T00:00:00`);
+      const ed = new Date(`${e}T00:00:00`);
+      if (sd.getTime() > ed.getTime()) {
+        errEl.textContent = "시작일이 종료일보다 늦을 수 없습니다.";
+        return false;
+      }
+      errEl.textContent = "";
+      return true;
+    }
+
+    cancel.addEventListener("click", () => close(null));
+    ok.addEventListener("click", () => {
+      if (!validate()) return;
+      close({ startStr: startEl.value, endStr: endEl.value });
+    });
+
+    overlay.addEventListener("click", (e) => {
+      if (e.target === overlay) close(null);
+    });
+    overlay.addEventListener("keydown", (e) => {
+      if (e.key === "Escape") close(null);
+      if (e.key === "Enter") ok.click();
+    });
+  });
 }
 
 /* ===== 메인 ===== */
 onAuthStateChanged(auth, async (user) => {
   if (!user) {
     alert("로그인이 필요합니다.");
-    window.location.href = "AfterLogIn.html";
+    const next = encodeURIComponent(location.href);                // ✅ 로그인 후 복귀
+    window.location.href = `AfterLogIn.html?next=${next}`;
     return;
   }
 
@@ -316,10 +440,11 @@ function renderCard(docSnap, user){
 
     <p><strong>self-consistency:</strong> ${selfConsistency ? "사용" : "미사용"}</p>
 
+    <button class="export-btn" aria-label="대화 출력">대화 출력</button>
+
     <div class="card-buttons">
       <button class="create-btn">${data.assistantId ? "다시 생성/업데이트" : "생성"}</button>
       <button class="student-btn" ${data.assistantId ? "" : "disabled title='먼저 생성하세요'"}>학생용 링크</button>
-      <button class="export-btn">CSV 내보내기</button>
       <button class="edit-btn">수정</button>
       <button class="delete-btn">삭제</button>
     </div>
@@ -329,48 +454,50 @@ function renderCard(docSnap, user){
   const studentBtn = card.querySelector(".student-btn");
   const exportBtn  = card.querySelector(".export-btn");
 
-  // ✅ 학생용 링크: teacherUid/assistantId 동시 전달 (StudentChat이 메타를 바로 저장 가능)
+  // ✅ 학생용 링크: 문서 ID를 반드시 포함 + 호환을 위해 assistant 파라미터도 유지
   studentBtn.addEventListener("click", () => {
-    if (!data.assistantId) return;
-    const params = new URLSearchParams({
-      // 호환성: 두 키 모두 전달
-      assistant: data.assistantId,
-      assistantId: data.assistantId,
-      name: name || "학생용 챗봇",
-      subject: subject || "",
-      model: String(modelDisplay || ""),
-      teacherUid: data.ownerUid || data.uid || user.uid || ""
-    });
-    window.open(`StudentChat.html?${params.toString()}`, "_blank", "noopener");
+    const url = new URL("StudentChat.html", location.origin);
+    url.searchParams.set("id", docSnap.id); // ★ 최신 assistantId를 보장하기 위한 핵심
+    if (data.assistantId) {
+      url.searchParams.set("assistant", data.assistantId);   // 호환용(기존 유지)
+      url.searchParams.set("assistantId", data.assistantId); // 호환용(기존 유지)
+    }
+    url.searchParams.set("name", name || "학생용 챗봇");
+    url.searchParams.set("subject", subject || "");
+    url.searchParams.set("model", String(modelDisplay || ""));
+    url.searchParams.set("teacherUid", data.ownerUid || data.uid || user.uid || "");
+    window.open(url.toString(), "_blank", "noopener");
   });
 
-  // ✅ 교과별 CSV 내보내기 (기간 필터 간단 프롬프트)
+  // 🗓️ 교과별 CSV 내보내기 (달력 모달, '종료일 포함')
   exportBtn.addEventListener("click", async () => {
     try {
       if (!subject || subject === "(교과 없음)") {
-        alert("교과 정보가 없어 CSV를 생성할 수 없습니다.");
+        alert("교과 정보가 없어 대화를 출력할 수 없습니다.");
         return;
       }
+      // 기본 기간: 최근 7일 ~ 오늘 (KST 로컬 환경 가정)
       const defaultStart = new Date();
       defaultStart.setDate(defaultStart.getDate() - 7);
-      const startStr = prompt("시작 날짜(YYYY-MM-DD)", yyyymmdd(defaultStart));
-      if (!startStr) return;
-      const endStr = prompt("종료 날짜(YYYY-MM-DD, *해당 일자 제외 상한*)", yyyymmdd(new Date()));
-      if (!endStr) return;
+      const defaultEnd = new Date();
 
-      // 로컬 타임 기준으로 하루 경계 정의(Asia/Seoul 고려는 서버/쿼리 단계에서 Timestamp로 고정)
-      const startDate = new Date(`${startStr}T00:00:00`);
-      const endDate = new Date(`${endStr}T00:00:00`);
+      const picked = await openDateRangeModal({
+        startStr: yyyymmdd(defaultStart),
+        endStr: yyyymmdd(defaultEnd)
+      });
+      if (!picked) return;
 
-      toast("CSV 생성 중…");
-      await exportSubjectCSV({
+      toast("대화 출력 준비 중…");
+      await exportSubjectCSV_fromStudentConversations({
         subject,
         teacherUid: data.ownerUid || data.uid || user.uid || "",
-        startDate, endDate
+        startStr: picked.startStr,
+        endStr: picked.endStr
       });
+      toast("📄 대화 출력(CSV) 완료");
     } catch (e) {
       console.error(e);
-      alert("CSV 생성 실패: " + (e?.message || e));
+      alert("대화 출력 실패: " + (e?.message || e));
     }
   });
 
@@ -411,7 +538,6 @@ function renderCard(docSnap, user){
 
           if (byName.has(filename)) {
             const f = byName.get(filename);
-            // 이미 붙어 있다 → 상태만 확인
             try {
               if (f.status !== "completed") {
                 await waitIndexed(vectorStoreId, f.id, { timeoutMs: 600000, intervalMs: 3000 });
@@ -424,7 +550,6 @@ function renderCard(docSnap, user){
             continue;
           }
 
-          // 새 파일만 업로드/첨부
           try {
             const blob = await downloadPdfBlob(m);
             const file = new File([blob], filename, { type: "application/pdf" });
@@ -446,18 +571,15 @@ function renderCard(docSnap, user){
         if (pendingFiles.length) {
           toast(`ⓘ ${pendingFiles.length}개 파일 인덱싱이 지연 중입니다. 완료되면 자동 반영돼요.`, 2600);
         } else if (newlyOk === 0) {
-          // 모든 시도가 실패 → RAG 없이 진행
           vectorStoreId = null;
           toast("⚠️ RAG 인덱싱 실패 → RAG 없이 업데이트", 2200);
         }
 
-        // Firestore에 VSID 저장(재사용 또는 신규)
         await updateDoc(doc(db, "chatbots", docSnap.id), {
           vectorStoreId: vectorStoreId || null
         });
       }
 
-      // ✅ RAG 안내 여부는 이번 클릭의 useRag로만 판단
       const instructions = buildInstructions(description, !!useRag, useFewShot, examples);
 
       // 4) Assistant 업서트
@@ -477,6 +599,9 @@ function renderCard(docSnap, user){
         ownerUid: data.ownerUid || user.uid // 누락 시 보강
       });
 
+      // ✅ 로컬 카드 상태도 즉시 갱신 (바로 이어서 '학생용 링크' 눌러도 새 ID 사용)
+      data.assistantId = assistant.id;
+
       toast("✅ 완료!");
       createBtn.textContent = "다시 생성/업데이트";
       studentBtn.disabled = false;
@@ -491,6 +616,8 @@ function renderCard(docSnap, user){
       alert("생성/업데이트 실패: " + (e?.message || e));
       createBtn.textContent = data.assistantId ? "다시 생성/업데이트" : "생성";
     } finally {
+      // eslint-disable-next-line no-unused-expressions
+      watchdog && clearTimeout(watchdog);
       createBtn.disabled = false;
     }
   });

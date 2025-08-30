@@ -11,10 +11,11 @@ export const TEACHER_EMAILS = [
   "gaegullll@gmail.com", 
   "whdusgml0806@gmail.com",
   "jsp4898@snu.ac.kr", 
+  "wkdgjsdud00@gmail.com"
 ];
 
 export const ADMIN_EMAILS = [
-  "wkdgjsdud@snu.ac.kr",    // 관리자 허용
+    // 관리자 허용
 ];
 
 // 공통 유틸 및 판별 함수

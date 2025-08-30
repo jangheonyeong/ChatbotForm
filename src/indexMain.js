@@ -5,55 +5,90 @@ import {
   signInWithPopup,
   signInWithRedirect,
   getRedirectResult,
-  onAuthStateChanged
+  onAuthStateChanged,
+  signInWithEmailAndPassword
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
 import { firebaseConfig } from "../firebaseConfig.js";
-
-// ✅ 화이트리스트/판별 함수 공통 모듈 사용
 import { isTeacher, isAdmin } from "./rolesMain.js";
 
+/* ===== Firebase ===== */
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
 
-// 항상 계정 선택 창을 띄우도록 설정
+/* ===== 상수 ===== */
+const CLASS_EMAIL_DOMAIN = "class.local";         // 내부용 도메인
+const LAST_STUDENT_ID_KEY = "last_student_id";    // 최근 아이디 저장
+
+/* ===== Google Provider(교사용) ===== */
 const provider = new GoogleAuthProvider();
 provider.setCustomParameters({ prompt: "select_account" });
 
-// 버튼
+/* ===== DOM ===== */
 const studentBtn = document.getElementById("studentStartBtn");
 const teacherBtn = document.getElementById("googleLoginBtn");
 
-// Safari/iOS에선 팝업 대신 리다이렉트 사용
-const isSafari = /^((?!chrome|android).)*safari/i.test(navigator.userAgent);
-const isIOS = /iPhone|iPad|iPod/i.test(navigator.userAgent);
-const useRedirect = isSafari || isIOS;
+// 학생 모달
+const idOverlay   = document.getElementById("studentIdOverlay");
+const idInput     = document.getElementById("studentIdInput");
+const pwInput     = document.getElementById("studentPwInput");
+const idOkBtn     = document.getElementById("studentIdConfirmBtn");
+const idCancelBtn = document.getElementById("studentIdCancelBtn");
 
-// 리다이렉트 흐름 구분용 키
-const FLOW_KEY = "login_flow"; // 'student' | 'teacher'
-
-// 공통 에러 토스트
+/* ===== 유틸 ===== */
+function openIdOverlay() {
+  if (pwInput) pwInput.value = "";
+  idOverlay.hidden = false;
+  idOverlay.setAttribute("aria-hidden", "false");
+  setTimeout(() => idInput?.focus(), 0);
+}
+function closeIdOverlay() {
+  idOverlay.hidden = true;
+  idOverlay.setAttribute("aria-hidden", "true");
+}
+function validStudentLocalId(s) {
+  // 하이픈 포함 형식(예: math1-01)
+  return /^[A-Za-z0-9-]{2,32}-[A-Za-z0-9-]{1,16}$/.test((s || "").trim());
+}
 function showLoginError(err) {
   console.error("로그인 실패:", err);
   alert("로그인에 실패했습니다: " + (err?.message || err));
 }
 
-// ── 학생: 항상 계정 선택 → 로그인 성공 시 StudentLogin.html로 이동
-async function startAsStudent() {
+/* ───────── 학생: 모달 → 이메일/비번 로그인 → StudentLogin.html ───────── */
+function startAsStudent() { openIdOverlay(); }
+
+async function confirmStudentLogin() {
+  const localId = (idInput?.value || "").trim();
+  const pwd     = (pwInput?.value || "").trim();
+
+  if (!validStudentLocalId(localId)) {
+    alert("아이디 형식을 확인하세요. 예: math1-01");
+    idInput?.focus(); return;
+  }
+  if (!pwd) {
+    alert("비밀번호를 입력하세요.");
+    pwInput?.focus(); return;
+  }
+
+  const email = `${localId}@${CLASS_EMAIL_DOMAIN}`;
+
   try {
-    if (useRedirect) {
-      sessionStorage.setItem(FLOW_KEY, "student");
-      await signInWithRedirect(auth, provider);
-      return; // 리다이렉트로 나감
-    } else {
-      await signInWithPopup(auth, provider); // 이미 로그인돼 있어도 계정 선택창 노출
-      window.location.href = "StudentLogin.html";
-    }
+    await signInWithEmailAndPassword(auth, email, pwd);
+    localStorage.setItem(LAST_STUDENT_ID_KEY, localId);
+    closeIdOverlay();
+    // 로그인 성공 → 교사 코드 입력/닉네임 화면으로 이동
+    location.href = "StudentLogin.html";
   } catch (err) {
     showLoginError(err);
   }
 }
 
-// ── 교사: 항상 계정 선택 → 허용 이메일만 교사용/관리자 페이지 접근
+/* ───────── 교사: Google 로그인 + 권한 확인 ───────── */
+const isSafari = /^((?!chrome|android).)*safari/i.test(navigator.userAgent);
+const isIOS = /iPhone|iPad|iPod/i.test(navigator.userAgent);
+const useRedirect = isSafari || isIOS;
+const FLOW_KEY = "login_flow"; // 'teacher'만 사용
+
 async function startAsTeacher() {
   try {
     if (useRedirect) {
@@ -63,63 +98,53 @@ async function startAsTeacher() {
     } else {
       const res = await signInWithPopup(auth, provider);
       const email = res.user?.email || "";
-
-      // 교사 허용(또는 관리자) 아니면 차단
       if (!(isTeacher(email) || isAdmin(email))) {
         alert("승인된 교사 계정이 아닙니다.");
         await auth.signOut();
-        return; // 차단
+        return;
       }
-
-      // 관리자면 Admin으로, 아니면 교사용 페이지로
-      window.location.href = isAdmin(email) ? "Admin.html" : "AfterLogIn.html";
+      location.href = isAdmin(email) ? "Admin.html" : "AfterLogIn.html";
     }
   } catch (err) {
     showLoginError(err);
   }
 }
 
-// ── 리다이렉트 복귀 처리 (Safari/iOS 등)
+/* ───────── 교사용 리다이렉트 복귀 ───────── */
 getRedirectResult(auth)
   .then((res) => {
-    if (!res?.user) return; // 리다이렉트가 아니면 무시
+    if (!res?.user) return;
     const flow = sessionStorage.getItem(FLOW_KEY);
     sessionStorage.removeItem(FLOW_KEY);
-
-    if (flow === "student") {
-      window.location.href = "StudentLogin.html";
-    } else if (flow === "teacher") {
+    if (flow === "teacher") {
       const email = res.user?.email || "";
-
       if (!(isTeacher(email) || isAdmin(email))) {
         alert("승인된 교사 계정이 아닙니다.");
         auth.signOut();
-        window.location.href = "index.html";
+        location.href = "index.html";
         return;
       }
-
-      window.location.href = isAdmin(email) ? "Admin.html" : "AfterLogIn.html";
+      location.href = isAdmin(email) ? "Admin.html" : "AfterLogIn.html";
     }
   })
   .catch(showLoginError);
 
-// ── 버튼 핸들러
-studentBtn?.addEventListener("click", (e) => {
-  e.preventDefault();
-  startAsStudent();
-});
-teacherBtn?.addEventListener("click", (e) => {
-  e.preventDefault();
-  startAsTeacher();
+/* ───────── 이벤트 바인딩 ───────── */
+studentBtn?.addEventListener("click", (e) => { e.preventDefault(); startAsStudent(); });
+teacherBtn?.addEventListener("click", (e) => { e.preventDefault(); startAsTeacher(); });
+
+idOkBtn?.addEventListener("click", () => { confirmStudentLogin(); });
+idCancelBtn?.addEventListener("click", () => { closeIdOverlay(); });
+
+[idInput, pwInput].forEach(el => {
+  el?.addEventListener("keydown", (e) => {
+    if (e.key === "Enter") { e.preventDefault(); confirmStudentLogin(); }
+    else if (e.key === "Escape") { e.preventDefault(); closeIdOverlay(); }
+  });
 });
 
-// (선택) 이미 로그인된 상태면 버튼 텍스트만 친절히 변경
+/* ───────── UX: 버튼 텍스트(선택) ───────── */
 onAuthStateChanged(auth, (user) => {
-  if (user) {
-    if (studentBtn) studentBtn.textContent = "학생으로 계속";
-    if (teacherBtn) teacherBtn.textContent = "교사로 계속";
-  } else {
-    if (studentBtn) studentBtn.textContent = "학생으로 시작";
-    if (teacherBtn) teacherBtn.textContent = "Google로 로그인";
-  }
+  if (teacherBtn) teacherBtn.textContent = user ? "교사로 계속" : "Google로 로그인";
+  // 학생 버튼 문구는 고정
 });

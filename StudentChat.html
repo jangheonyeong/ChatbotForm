@@ -5,46 +5,75 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
   <title>학생용 챗봇</title>
   <link rel="stylesheet" href="StudentChatStyles.css"/>
+
+  <!-- Markdown & 수식 -->
+  <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/dompurify@3.0.8/dist/purify.min.js"></script>
+  <script id="MathJax-script" async src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
 </head>
 <body>
-  <div class="page">
-    <div class="topbar">
-      <a href="StudentLogin.html" class="home-btn" title="처음으로">
-        <img src="https://img.icons8.com/ios-filled/24/ffffff/home.png" alt="홈"/>
-      </a>
-      <div class="title-area">
-        <h1 id="botTitle">학생용 챗봇</h1>
-        <div class="subtitle">
-          <span id="subjectLabel"></span>
-          <!-- 모델 표시는 제거됨 -->
+  <div class="app">
+    <header class="topbar">
+      <div class="topbar-inner">
+        <a href="StudentLogin.html" class="icon-btn home" title="처음으로" aria-label="처음으로">
+          <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor" aria-hidden="true">
+            <path d="M12 3l9 8h-3v10h-5V14H11v7H6V11H3l9-8z"></path>
+          </svg>
+        </a>
+
+        <div class="title-block">
+          <h1 id="botTitle">학생용 챗봇</h1>
+          <div class="subtitle">
+            <span id="subjectLabel"></span>
+          </div>
+        </div>
+
+        <div class="right-actions">
+          <button id="issueCodeBtn" class="pill-btn success" style="display:none;">코드 발급</button>
+          <button id="resetThreadBtn" class="icon-btn ghost" title="새로 시작">
+            <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor" aria-hidden="true">
+              <path d="M12 6V3L8 7l4 4V8c2.76 0 5 2.24 5 5a5 5 0 1 1-8.66-3.66l-1.42-1.42A7 7 0 1 0 19 13c0-3.87-3.13-7-7-7z"></path>
+            </svg>
+          </button>
         </div>
       </div>
-      <div class="right-actions">
-        <!-- 교사 전용: 권한 있을 때만 표시 -->
-        <button id="issueCodeBtn" class="btn success" style="display:none;">코드 발급</button>
-        <button id="resetThreadBtn" class="btn ghost">새로 시작</button>
+
+      <div id="codePanel" class="code-panel" style="display:none;">
+        <input id="codeText" class="code-text" type="text" readonly placeholder="발급된 코드가 여기에 표시됩니다." />
+        <button id="copyCodeBtn" class="pill-btn small">복사</button>
+        <span class="hint">24시간 유효</span>
       </div>
+    </header>
+
+    <main class="chat">
+      <div id="chatWindow" class="chat-window"></div>
+    </main>
+
+    <div class="composer-wrap">
+      <form id="composer" class="composer" autocomplete="off">
+        <div id="fileChips" class="chips"></div>
+
+        <div class="input-row">
+          <button id="attachBtn" class="icon-btn attach" type="button" title="파일 첨부" aria-label="파일 첨부">📎</button>
+          <input id="fileInput" type="file" multiple hidden
+                 accept=".pdf,image/*,.txt,.md,.csv,.tsv,.json,.xml" />
+          <textarea id="userMessage" rows="1" placeholder="메시지를 입력하세요. (Enter 전송 · Shift+Enter 줄바꿈)"></textarea>
+          <button id="sendBtn" class="icon-btn primary" type="submit" title="보내기" aria-label="보내기">
+            <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor" aria-hidden="true">
+              <path d="M2 21l21-9L2 3v7l15 2-15 2v7z"></path>
+            </svg>
+          </button>
+        </div>
+
+        <div class="foot-hint">파일(PDF/이미지/텍스트)을 📎로 첨부할 수 있어요.</div>
+      </form>
     </div>
+  </div>
 
-    <!-- 교사 전용: 발급된 코드 패널 -->
-    <div id="codePanel" class="code-panel" style="display:none;">
-      <input id="codeText" class="code-text" type="text" readonly placeholder="발급된 코드가 여기에 표시됩니다." />
-      <button id="copyCodeBtn" class="btn small">복사</button>
-      <span class="hint">24시간 유효</span>
-    </div>
-
-    <div class="nickname-bar">
-      <label for="nicknameInput">닉네임</label>
-      <!-- 이 페이지에서는 읽기 전용: StudentLogin.html에서만 수정 -->
-      <input id="nicknameInput" type="text" maxlength="20" placeholder="예: 과학짱" readonly />
-    </div>
-
-    <div id="chatWindow" class="chat-window"></div>
-
-    <form id="composer" class="composer" autocomplete="off">
-      <textarea id="userMessage" rows="2" placeholder="메시지를 입력하세요. (Shift+Enter 줄바꿈)"></textarea>
-      <button id="sendBtn" class="btn primary" type="submit">보내기</button>
-    </form>
+  <!-- 🔎 이미지 라이트박스 -->
+  <div id="lightbox" aria-hidden="true">
+    <button id="lightboxClose" class="lb-close" aria-label="닫기">✕</button>
+    <img id="lightboxImg" alt="첨부 이미지 미리보기"/>
   </div>
 
   <script type="module" src="src/StudentChatMain.js"></script>

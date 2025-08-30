@@ -1,12 +1,16 @@
-// [src/StudentChatMain.js]
+// [src/StudentChatMain.js] — 첨부 썸네일/라이트박스 + Markdown/수식 렌더링 + Firestore 롱폴링 안정화
 
 import { initializeApp, getApps } from "firebase/app";
 import {
-  getFirestore, doc, getDoc,
+  initializeFirestore, doc, getDoc,
   collection, addDoc, setDoc, serverTimestamp,
   getDocs, query, where
 } from "firebase/firestore";
-import { getAuth, signInAnonymously, onAuthStateChanged } from "firebase/auth";
+import {
+  getAuth,
+  onAuthStateChanged,
+  updateCurrentUser,
+} from "firebase/auth";
 import { firebaseConfig } from "../firebaseConfig.js";
 
 /* ===== 상수 ===== */
@@ -14,17 +18,24 @@ const CONV_COL = "student_conversations";
 const MSGS_SUB = "messages";
 
 /* ===== Firebase init ===== */
-// 학생 세션(익명) - 세컨더리 앱
 const studentApp =
   getApps().find(a => a.name === "student-app") ||
   initializeApp(firebaseConfig, "student-app");
-const db = getFirestore(studentApp);
-const auth = getAuth(studentApp);
+const db = initializeFirestore(studentApp, {
+  experimentalAutoDetectLongPolling: true,
+  useFetchStreams: false,
+});
 
-// 교사 세션(로그인) - 기본 앱
-const defaultApp = getApps().find(a => a.name === "[DEFAULT]") || initializeApp(firebaseConfig);
-const dbPrimary = getFirestore(defaultApp);
-const teacherAuth = getAuth(defaultApp);
+const defaultApp =
+  getApps().find(a => a.name === "[DEFAULT]") ||
+  initializeApp(firebaseConfig);
+const dbPrimary = initializeFirestore(defaultApp, {
+  experimentalAutoDetectLongPolling: true,
+  useFetchStreams: false,
+});
+
+const authStudent = getAuth(studentApp);
+const authDefault = getAuth(defaultApp);
 
 /* ===== DOM ===== */
 const botTitle = document.getElementById("botTitle");
@@ -33,7 +44,6 @@ const chatWindow = document.getElementById("chatWindow");
 const composer = document.getElementById("composer");
 const userMessageEl = document.getElementById("userMessage");
 const sendBtn = document.getElementById("sendBtn");
-const nickInput = document.getElementById("nicknameInput");
 const resetThreadBtn = document.getElementById("resetThreadBtn");
 
 // 교사 전용 UI
@@ -42,16 +52,39 @@ const codePanel = document.getElementById("codePanel");
 const codeText = document.getElementById("codeText");
 const copyCodeBtn = document.getElementById("copyCodeBtn");
 
+// 첨부 DOM
+const attachBtn = document.getElementById("attachBtn");
+const fileInput = document.getElementById("fileInput");
+const fileChips = document.getElementById("fileChips");
+
+// 라이트박스
+const lightbox = document.getElementById("lightbox");
+const lightboxImg = document.getElementById("lightboxImg");
+const lightboxClose = document.getElementById("lightboxClose");
+
 /* ===== OpenAI ===== */
-const OPENAI_API_KEY = import.meta.env.VITE_OPENAI_API_KEY || "";
 const OPENAI_BASE = "https://api.openai.com/v1";
+
+// Vite(.env) → window.__ENV → localStorage
+const OPENAI_API_KEY =
+  ((typeof import.meta !== "undefined") && import.meta.env && import.meta.env.VITE_OPENAI_API_KEY) ||
+  (window.__ENV && window.__ENV.OPENAI_API_KEY) ||
+  localStorage.getItem("OPENAI_API_KEY") ||
+  "";
 
 function assertApiKey() {
   if (!OPENAI_API_KEY) {
-    alert("OpenAI API 키가 설정되어 있지 않습니다. (.env의 VITE_OPENAI_API_KEY)");
+    alert([
+      "OpenAI API 키가 설정되어 있지 않습니다.",
+      "설정 방법:",
+      "1) 루트 .env: VITE_OPENAI_API_KEY=sk-... 저장 후 `npm run dev`",
+      "2) 개발용: env.local.js에서 window.__ENV.OPENAI_API_KEY 지정",
+      "3) 임시: localStorage.setItem('OPENAI_API_KEY','sk-...')",
+    ].join("\n"));
     throw new Error("Missing OPENAI key");
   }
 }
+
 async function openaiFetch(path, { method = "GET", headers = {}, body } = {}) {
   assertApiKey();
   const isForm = body instanceof FormData;
@@ -72,9 +105,33 @@ async function openaiFetch(path, { method = "GET", headers = {}, body } = {}) {
   }
   return res.json();
 }
+
+/* ===== Assistants v2 helpers ===== */
 const createThread = () => openaiFetch("/threads", { method: "POST", body: {} });
-const addMessage = (threadId, content) =>
-  openaiFetch(`/threads/${threadId}/messages`, { method: "POST", body: { role: "user", content }});
+
+async function addMessageRich(threadId, text, uploaded = []) {
+  const content = [];
+  const trimmed = (text || "").trim();
+
+  if (trimmed) content.push({ type: "text", text: trimmed });
+
+  const attachments = [];
+  for (const u of uploaded) {
+    if ((u.mime || "").startsWith("image/")) {
+      content.push({ type: "image_file", image_file: { file_id: u.id } });
+    } else {
+      attachments.push({ file_id: u.id, tools: [{ type: "file_search" }] });
+    }
+  }
+
+  if (content.length === 0) content.push({ type: "text", text: "첨부 파일을 참고해 주세요." });
+
+  return openaiFetch(`/threads/${threadId}/messages`, {
+    method: "POST",
+    body: { role: "user", content, ...(attachments.length ? { attachments } : {}) }
+  });
+}
+
 const createRun = (threadId, assistantId) =>
   openaiFetch(`/threads/${threadId}/runs`, { method: "POST", body: { assistant_id: assistantId }});
 const getRun = (threadId, runId) =>
@@ -91,13 +148,39 @@ function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
 function escapeHtml(str = "") {
   return String(str).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
 }
-function renderBubble(role, text) {
+function addMsgEl(role, html, {asHtml=false} = {}) {
   const wrap = document.createElement("div");
   wrap.className = `msg ${role}`;
-  wrap.innerHTML = `<div class="bubble">${escapeHtml(text)}</div>`;
+  const bubble = document.createElement("div");
+  bubble.className = "bubble";
+  bubble.innerHTML = asHtml ? html : escapeHtml(html);
+  wrap.appendChild(bubble);
   chatWindow.appendChild(wrap);
   chatWindow.scrollTop = chatWindow.scrollHeight;
+  return bubble;
 }
+function renderBubble(role, text) { addMsgEl(role, text); }
+
+/* 타자 효과 */
+async function renderTypewriter(role, fullText, speed = 16) {
+  const wrap = document.createElement("div");
+  wrap.className = `msg ${role}`;
+  const bubble = document.createElement("div");
+  bubble.className = "bubble";
+  bubble.textContent = "";
+  wrap.appendChild(bubble);
+  chatWindow.appendChild(wrap);
+  chatWindow.scrollTop = chatWindow.scrollHeight;
+
+  for (const ch of fullText) {
+    bubble.textContent += ch;
+    if (speed) await sleep(speed);
+    chatWindow.scrollTop = chatWindow.scrollHeight;
+  }
+  return bubble;
+}
+
+/* 생각중… */
 function renderTyping(show) {
   let el = document.getElementById("typing");
   if (show) {
@@ -105,7 +188,10 @@ function renderTyping(show) {
       el = document.createElement("div");
       el.id = "typing";
       el.className = "msg assistant";
-      el.innerHTML = `<div class="bubble"><span class="typing">생각 중…</span></div>`;
+      el.innerHTML =
+        `<div class="bubble"><span class="typing">
+           <span class="dot"></span><span class="dot"></span><span class="dot"></span>
+         </span></div>`;
       chatWindow.appendChild(el);
     }
   } else {
@@ -116,13 +202,15 @@ function renderTyping(show) {
 function setSending(on) {
   sendBtn.disabled = on;
   userMessageEl.disabled = on;
+  attachBtn.disabled = on;
 }
 
-/* ===== Nickname(읽기 전용) ===== */
+/* ===== Nickname ===== */
 const NICK_KEY = "student_nickname";
 function loadNick() {
   const n = localStorage.getItem(NICK_KEY) || "";
-  nickInput.value = n;
+  const input = document.getElementById("nicknameInput");
+  if (input) input.value = n;
   return n;
 }
 
@@ -137,49 +225,146 @@ async function getOrCreateThread(aid, nickname) {
   localStorage.setItem(key, tid);
   return tid;
 }
-function resetThread(aid, nickname) {
-  const key = threadKey(aid, nickname);
-  localStorage.removeItem(key);
-}
-
+function resetThread(aid, nickname) { localStorage.removeItem(threadKey(aid, nickname)); }
 function convKey(aid, nickname) { return `conv:${aid}:${nickname || "guest"}`; }
 
 let assistantId = null;
 let chatbotDocId = null;
-let teacherUid = null;     // (보존용) 챗봇 소유자 UID가 있을 수 있음
+let teacherUid = null;
 let subjectStr = "";
-let modelStr = ""; // UI 미표시
+let modelStr = "";
 let conversationId = null;
 
+/* ===== Auth ===== */
+function waitForAuthUser(auth, timeoutMs = 8000) {
+  return new Promise((resolve) => {
+    let settled = false;
+    const timer = setTimeout(() => {
+      if (settled) return;
+      settled = true;
+      resolve(auth.currentUser || null);
+    }, timeoutMs);
+    const unsub = onAuthStateChanged(auth, (u) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      unsub();
+      resolve(u || null);
+    });
+  });
+}
 async function ensureAuth() {
-  if (auth.currentUser) return auth.currentUser;
-  const cred = await signInAnonymously(auth);
-  return cred.user;
+  let u = authDefault.currentUser;
+  if (!u) u = await waitForAuthUser(authDefault, 8000);
+
+  if (!u) {
+    const next = encodeURIComponent(location.href);
+    location.replace(`index.html?next=${next}`);
+    return null;
+  }
+
+  try { await updateCurrentUser(authStudent, u); }
+  catch (e) { console.warn("[auth] updateCurrentUser(student-app) 실패:", e?.message || e); }
+  return u;
 }
 
+/* ===== 🔎 역추적 보강: code/assistant/id → teacherUid/chatbotDocId 채우기 ===== */
+async function hydrateFromCodeOrAssistant() {
+  // 1) ?code=###### 로 들어온 경우
+  const codeParam = qsParam("code");
+  if (codeParam) {
+    try {
+      const qy = query(
+        collection(dbPrimary, "access_codes"),
+        where("code", "==", codeParam),
+        where("active", "==", true)
+      );
+      const snap = await getDocs(qy);
+      if (!snap.empty) {
+        const ac = snap.docs[0].data() || {};
+        assistantId  = ac.assistantId  || assistantId;
+        chatbotDocId = ac.chatbotDocId || chatbotDocId;
+        teacherUid   = ac.teacherUid   || teacherUid;
+      }
+    } catch (e) {
+      console.warn("[hydrate] access_codes 조회 실패:", e?.message || e);
+    }
+  }
+
+  // 2) assistantId만 있는 경우: chatbots에서 소유자 역추적
+  if (!teacherUid && assistantId) {
+    try {
+      const qy = query(collection(dbPrimary, "chatbots"), where("assistantId", "==", assistantId));
+      const ss = await getDocs(qy);
+      if (!ss.empty) {
+        const d = ss.docs[0].data() || {};
+        teacherUid   = d.ownerUid || d.uid || teacherUid;
+        chatbotDocId = chatbotDocId || ss.docs[0].id;
+      }
+    } catch (e) {
+      console.warn("[hydrate] chatbots by assistantId 실패:", e?.message || e);
+    }
+  }
+
+  // 3) chatbotDocId만 있는 경우
+  if (!teacherUid && chatbotDocId) {
+    try {
+      const s = await getDoc(doc(dbPrimary, "chatbots", chatbotDocId));
+      if (s.exists()) {
+        const d = s.data() || {};
+        teacherUid = d.ownerUid || d.uid || teacherUid;
+      }
+    } catch (e) {
+      console.warn("[hydrate] chatbots by id 실패:", e?.message || e);
+    }
+  }
+}
+
+/* ===== 부모 대화 문서 보장 ===== */
 async function ensureConversation() {
-  await ensureAuth();
-  const nickname = nickInput.value.trim() || "손님";
+  const u = await ensureAuth();
+  if (!u) return null;
+
+  const nickname = (document.getElementById("nicknameInput")?.value || "").trim() || "손님";
   const key = convKey(assistantId, nickname);
   let convId = localStorage.getItem(key);
 
-  if (!convId) {
-    const convRef = await addDoc(collection(db, CONV_COL), {
-      assistantId,
-      subject: subjectStr || "",
-      model: modelStr || "",
-      teacherUid: teacherUid || "",
-      chatbotDocId: chatbotDocId || "",
-      studentNickname: nickname,
-      createdBy: auth.currentUser?.uid || null,
-      createdAt: serverTimestamp(),
-      updatedAt: serverTimestamp()
-    });
-    convId = convRef.id;
-    localStorage.setItem(key, convId);
-  } else {
-    try { await setDoc(doc(db, CONV_COL, convId), { updatedAt: serverTimestamp() }, { merge: true }); } catch {}
+  // 규칙 통과용 payload (모든 필드 string 타입 보장, createdBy는 빈 문자열이라도 null 금지)
+  const buildPayload = () => ({
+    assistantId: String(assistantId || ""),
+    subject: String(subjectStr || ""),
+    model: String(modelStr || ""),
+    teacherUid: String(teacherUid || ""),
+    chatbotDocId: String(chatbotDocId || ""),
+    studentNickname: nickname,
+    createdBy: String(authStudent.currentUser?.uid || authDefault.currentUser?.uid || ""),
+    createdAt: serverTimestamp(),
+    updatedAt: serverTimestamp(),
+  });
+
+  // 저장된 convId가 있으면 실존 확인
+  if (convId) {
+    try {
+      const ref = doc(db, CONV_COL, convId);
+      const snap = await getDoc(ref);
+      if (snap.exists()) {
+        try { await setDoc(ref, { updatedAt: serverTimestamp() }, { merge: true }); } catch {}
+        conversationId = convId;
+        return convId;
+      }
+    } catch {}
+    // 실존하지 않으면 키 폐기
+    try { localStorage.removeItem(key); } catch {}
+    convId = null;
   }
+
+  // teacherUid가 비어 있으면 저장 직전에 보강
+  if (!teacherUid) { await hydrateFromCodeOrAssistant(); }
+
+  // 새 부모 문서 생성
+  const refNew = await addDoc(collection(db, CONV_COL), buildPayload());
+  convId = refNew.id;
+  try { localStorage.setItem(key, convId); } catch {}
   conversationId = convId;
   return convId;
 }
@@ -197,14 +382,14 @@ async function logMessage(role, content) {
   }
 }
 
-/* ===== Chatbot 메타 로드 ===== */
+/* ===== Chatbot 메타 ===== */
 async function loadChatbotMeta() {
   chatbotDocId = qsParam("id");
   assistantId = qsParam("assistant") || qsParam("assistantId");
 
   const qName = qsParam("name");
   const qSubject = qsParam("subject");
-  const qModel = qsParam("model"); // 저장만
+  const qModel = qsParam("model");
   const qTeacherUid = qsParam("teacherUid");
 
   if (qName)    botTitle.textContent = qName;
@@ -216,7 +401,7 @@ async function loadChatbotMeta() {
 
   if (chatbotDocId) {
     try {
-      const snap = await getDoc(doc(db, "chatbots", chatbotDocId));
+      const snap = await getDoc(doc(dbPrimary, "chatbots", chatbotDocId));
       if (snap.exists()) {
         const data = snap.data() || {};
         assistantId = data.assistantId || assistantId;
@@ -241,18 +426,212 @@ async function loadChatbotMeta() {
       if (lastDoc && !chatbotDocId) chatbotDocId = lastDoc;
     }
   }
-  if (!assistantId) throw new Error("assistantId가 없습니다. URL에 ?assistant=asst_xxx 를 포함해 주세요.");
+
+  // ✅ 어떤 경로로 들어와도 teacherUid 최대한 채우기
+  await hydrateFromCodeOrAssistant();
+
+  if (!assistantId) {
+    throw new Error("assistantId가 없습니다. URL에 ?assistant=asst_xxx 또는 ?code=###### 또는 ?id=<문서ID> 중 하나가 필요합니다.");
+  }
 }
 
-/* ===== Assistants 채팅 플로우 ===== */
+/* ===== 파일 첨부 ===== */
+let pendingFiles = []; // File[]
+
+function bytesToMB(n) { return (n / (1024 * 1024)).toFixed(1) + "MB"; }
+
+function renderChips() {
+  if (!fileChips) return;
+  fileChips.innerHTML = "";
+  pendingFiles.forEach((f, i) => {
+    const chip = document.createElement("span");
+    chip.className = "chip";
+    chip.title = `${f.type || "unknown"} • ${bytesToMB(f.size)}`;
+    chip.innerHTML = `${escapeHtml(f.name)} <button type="button" class="chip-x" data-i="${i}">×</button>`;
+    fileChips.appendChild(chip);
+  });
+  fileChips.querySelectorAll(".chip-x").forEach(btn => {
+    btn.addEventListener("click", (e) => {
+      const idx = Number(e.currentTarget.getAttribute("data-i"));
+      if (!Number.isNaN(idx)) {
+        pendingFiles.splice(idx, 1);
+        renderChips();
+      }
+    });
+  });
+}
+
+attachBtn?.addEventListener("click", () => fileInput?.click());
+fileInput?.addEventListener("change", (e) => {
+  const list = Array.from(e.target.files || []);
+  for (const f of list) {
+    if (f.size > 25 * 1024 * 1024) { alert(`25MB 초과 파일 제외: ${f.name}`); continue; }
+    pendingFiles.push(f);
+  }
+  fileInput.value = "";
+  renderChips();
+});
+
+/* 드래그&드롭 */
+let dragDepth = 0;
+document.addEventListener("dragenter", (e) => { e.preventDefault(); dragDepth++; composer.classList.add("dragging"); });
+document.addEventListener("dragover", (e) => { e.preventDefault(); });
+document.addEventListener("dragleave", () => { dragDepth = Math.max(0, dragDepth - 1); if (dragDepth===0) composer.classList.remove("dragging"); });
+document.addEventListener("drop", (e) => {
+  e.preventDefault(); dragDepth = 0; composer.classList.remove("dragging");
+  const list = Array.from(e.dataTransfer?.files || []);
+  for (const f of list) {
+    if (f.size > 25 * 1024 * 1024) { alert(`25MB 초과 파일 제외: ${f.name}`); continue; }
+    pendingFiles.push(f);
+  }
+  renderChips();
+});
+
+/* OpenAI Files 업로드 → [{id, mime}] */
+async function uploadFilesForAssistants(files) {
+  const out = [];
+  for (const f of files) {
+    const fd = new FormData();
+    fd.append("purpose", "assistants");
+    fd.append("file", f, f.name);
+    const j = await openaiFetch("/files", { method: "POST", body: fd });
+    out.push({ id: j.id, mime: f.type || "" });
+  }
+  return out;
+}
+
+/* ===== 첨부 미리보기(버블 내) ===== */
+function fileExt(name="") {
+  const m = name.split(".");
+  return m.length > 1 ? m.pop().toUpperCase() : "";
+}
+function createObjectLink(file) {
+  const url = URL.createObjectURL(file);
+  return { url, revoke: () => URL.revokeObjectURL(url) };
+}
+function renderUserWithAttachments(text, files=[]) {
+  // 버블
+  const wrap = document.createElement("div");
+  wrap.className = "msg user";
+  const bubble = document.createElement("div");
+  bubble.className = "bubble";
+
+  // 텍스트
+  if (text && text.trim()) {
+    const p = document.createElement("div");
+    p.textContent = text;
+    bubble.appendChild(p);
+  }
+
+  // 첨부 그리드
+  if (files.length) {
+    const grid = document.createElement("div");
+    grid.className = "attachments";
+
+    files.forEach(file => {
+      const { url } = createObjectLink(file);
+
+      if ((file.type || "").startsWith("image/")) {
+        const item = document.createElement("div");
+        item.className = "att image";
+        item.innerHTML = `
+          <a href="${url}" class="lightbox" data-src="${url}">
+            <img src="${url}" alt="${escapeHtml(file.name)}" />
+            <div class="caption">${escapeHtml(file.name)}</div>
+          </a>`;
+        grid.appendChild(item);
+      } else {
+        const item = document.createElement("div");
+        item.className = "att file";
+        item.innerHTML = `
+          <a href="${url}" target="_blank" rel="noopener" download="${escapeHtml(file.name)}">
+            <div class="row">
+              <span class="icon">📄</span>
+              <span class="meta">
+                <strong title="${escapeHtml(file.name)}">${escapeHtml(file.name)}</strong>
+                <span class="size">${fileExt(file.name)} · ${bytesToMB(file.size)}</span>
+              </span>
+            </div>
+          </a>`;
+        grid.appendChild(item);
+      }
+    });
+
+    bubble.appendChild(grid);
+  }
+
+  wrap.appendChild(bubble);
+  chatWindow.appendChild(wrap);
+  chatWindow.scrollTop = chatWindow.scrollHeight;
+}
+
+/* ===== 라이트박스 ===== */
+function openLightbox(src, alt="첨부 이미지") {
+  if (!src) return;
+  lightboxImg.src = src;
+  lightboxImg.alt = alt;
+  lightbox.classList.add("show");
+  document.body.style.overflow = "hidden";
+}
+function closeLightbox() {
+  lightbox.classList.remove("show");
+  lightboxImg.removeAttribute("src");
+  document.body.style.overflow = "";
+}
+document.addEventListener("click", (e) => {
+  const a = e.target.closest("a.lightbox");
+  if (a) {
+    e.preventDefault();
+    openLightbox(a.getAttribute("data-src"), a.querySelector("img")?.alt || "");
+  }
+});
+lightbox?.addEventListener("click", (e) => { if (e.target === lightbox) closeLightbox(); });
+lightboxClose?.addEventListener("click", closeLightbox);
+document.addEventListener("keydown", (e) => { if (e.key === "Escape" && lightbox.classList.contains("show")) closeLightbox(); });
+
+/* ===== Markdown/수식 렌더링 ===== */
+function cleanCitations(raw="") {
+  //  같은 특수 각주 제거
+  return raw
+    .replace(/【[^】]*?†[^】]*】/g, "")
+    .replace(/【[^】]*?source[^】]*】/gi, "");
+}
+function mdToHtml(md="") {
+  const safe = (window.DOMPurify?.sanitize ?? (x=>x));
+  const parsed = window.marked?.parse ? window.marked.parse(md, { breaks:true, gfm:true }) : md;
+  return safe(parsed);
+}
+async function renderAssistantMarkdownSmart(text) {
+  const cleaned = cleanCitations(text || "");
+  const bubble = await renderTypewriter("assistant", cleaned, 16);
+  const html = `<div class="md">${mdToHtml(cleaned)}</div>`;
+  bubble.innerHTML = html;
+  try { await window.MathJax?.typesetPromise?.([bubble]); } catch {}
+}
+
+/* ===== 채팅 플로우 ===== */
 async function sendMessageFlow(text) {
-  const nickname = nickInput.value.trim() || "손님";
+  const nickname = (document.getElementById("nicknameInput")?.value || "").trim() || "손님";
   const threadId = await getOrCreateThread(assistantId, nickname);
 
   await ensureConversation();
-  await logMessage("user", text);
 
-  await addMessage(threadId, text);
+  // 사용자 메시지 + 첨부 표시
+  const filesSnapshot = pendingFiles.slice();
+  let userShown = text;
+  if (filesSnapshot.length > 0) {
+    const names = filesSnapshot.map(f => f.name).join(", ");
+    userShown = text ? `${text}\n\n(첨부: ${names})` : `(첨부: ${names})`;
+  }
+  await logMessage("user", userShown);
+  renderUserWithAttachments(text, filesSnapshot);
+
+  // 업로드 후 전송
+  const uploaded = filesSnapshot.length ? await uploadFilesForAssistants(filesSnapshot) : [];
+  pendingFiles = [];
+  renderChips();
+
+  await addMessageRich(threadId, text, uploaded);
   const run = await createRun(threadId, assistantId);
 
   let status = run.status;
@@ -278,19 +657,18 @@ async function sendMessageFlow(text) {
   for (let i = all.length - 1; i >= 0; i--) {
     const m = all[i];
     if (m.role !== "assistant") continue;
-    const parts = m.content || [];
-    const txtPart = parts.find(p => p.type === "text");
+    const txtPart = (m.content || []).find(p => p.type === "text");
     const textValue = txtPart?.text?.value || "(빈 응답)";
-    renderBubble("assistant", textValue);
-    await logMessage("assistant", textValue);
+    await renderAssistantMarkdownSmart(textValue);
+    await logMessage("assistant", cleanCitations(textValue));
     break;
   }
 }
 
-/* ===== 교사 권한 체크 & 코드 발급 ===== */
+/* ===== 권한/코드 발급 ===== */
 const ADMIN_EMAIL_WHITELIST = ["wkdgjsdud@snu.ac.kr", "janghy0412@gmail.com"];
+const WL = ADMIN_EMAIL_WHITELIST.map(e => e.trim().toLowerCase());
 
-/** 커스텀 클레임 전파 대기(최대 maxMs, 지수 백오프) */
 async function waitClaimsPropagation(user, maxMs = 15000) {
   if (!user) return null;
   const started = Date.now();
@@ -302,7 +680,7 @@ async function waitClaimsPropagation(user, maxMs = 15000) {
       const r = await user.getIdTokenResult();
       lastClaims = r?.claims || null;
       if (lastClaims?.teacher === true || lastClaims?.admin === true) return lastClaims;
-    } catch (e) { /* noop */ }
+    } catch {}
     await sleep(delay);
     delay = Math.min(delay * 1.6, 2500);
   }
@@ -311,13 +689,13 @@ async function waitClaimsPropagation(user, maxMs = 15000) {
 
 async function isTeacherAuthorized(user) {
   if (!user) return false;
-  if (user.email && ADMIN_EMAIL_WHITELIST.includes(user.email)) return true;
-
+  const emailNorm = (user.email || "").trim().toLowerCase();
+  if (emailNorm && WL.includes(emailNorm)) return true;
   try {
-    let token = await user.getIdTokenResult();
-    if (token?.claims?.teacher === true || token?.claims?.admin === true) return true;
+    const token = await user.getIdTokenResult();
+    if (token?.claims?.teacher === true || token?.claims?.admin === true) return true; // ✅ admin 경로 수정
+    if (user.uid && user.uid === (teacherUid || "")) return true;
 
-    // teachers 문서가 긍정적이면 전파 대기 후 재확인
     try {
       const tSnap = await getDoc(doc(dbPrimary, "teachers", user.uid));
       if (tSnap.exists()) {
@@ -353,7 +731,6 @@ function toggleTeacherUI(isTeacher) {
   }
 }
 
-// 6자리 숫자 코드
 function randomNumericCode(len = 6) {
   let out = "";
   for (let i = 0; i < len; i++) out += Math.floor(Math.random() * 10);
@@ -377,36 +754,32 @@ async function createUniqueCode() {
 }
 
 async function generateAccessCode() {
-  const u = teacherAuth.currentUser;
-  if (!u) { alert("교사 계정으로 로그인해 주세요."); return; }
+  const u = authDefault.currentUser;
+  if (!u) { alert("코드 발급은 교사 전용입니다. 로그인해 주세요."); return; }
 
-  // 생성 직전 토큰 리프레시/전파 대기
   await waitClaimsPropagation(u, 3000);
   const finalToken = await u.getIdTokenResult();
+
   const hasTeacher = finalToken?.claims?.teacher === true || finalToken?.claims?.admin === true;
-  if (!hasTeacher) {
-    alert("코드 발급 권한이 없습니다. (권한 반영까지 시간이 걸릴 수 있습니다. 새로고침 후 재시도)");
+  const emailNorm = (u.email || "").trim().toLowerCase();
+  const emailWhitelisted = !!(emailNorm && WL.includes(emailNorm));
+  const isOwner = (u.uid || "") === (teacherUid || "");
+
+  if (!hasTeacher && !emailWhitelisted && !isOwner) {
+    alert("코드 발급 권한이 없습니다. (교사 클레임/화이트리스트/소유자 중 하나 필요)");
     return;
   }
 
   const code = await createUniqueCode();
-  const now = new Date();
-  const expires = new Date(now.getTime() + 24 * 60 * 60 * 1000); // 24시간
+  const expires = new Date(Date.now() + 24 * 60 * 60 * 1000);
 
-  // ✅ 규칙에 맞춘 8개 필드만 저장 (teacherUid는 현재 로그인 UID)
   const payload = {
-    code,
-    active: true,
-    assistantId: assistantId || "",
-    chatbotDocId: chatbotDocId || "",
-    teacherUid: u.uid,
-    teacherEmail: u.email || "",
-    createdAt: serverTimestamp(),
-    expiresAt: expires
+    code, active: true,
+    assistantId: assistantId || "", chatbotDocId: chatbotDocId || "",
+    teacherUid: u.uid, teacherEmail: u.email || "",
+    createdAt: serverTimestamp(), expiresAt: expires
   };
-
-  const ref = await addDoc(collection(dbPrimary, "access_codes"), payload);
-  console.debug("[code] saved at access_codes docId:", ref.id);
+  await addDoc(collection(dbPrimary, "access_codes"), payload);
 
   codeText.value = code;
   codePanel.style.display = "flex";
@@ -418,14 +791,58 @@ async function generateAccessCode() {
   }
 }
 
-/* ===== 로그인 상태 변화 감지 & 권한 UI 반영 ===== */
-onAuthStateChanged(teacherAuth, async (user) => {
+/* ===== Auth 상태 반영 ===== */
+onAuthStateChanged(authDefault, async (user) => {
   if (user) await waitClaimsPropagation(user, 15000);
   const ok = await isTeacherAuthorized(user);
   toggleTeacherUI(ok);
 });
 
-/* ===== 버튼 동작 ===== */
+/* ===== Init ===== */
+(async function init() {
+  try {
+    loadNick();
+    const u = await ensureAuth();
+    if (!u) return;
+
+    await loadChatbotMeta();
+    renderBubble("assistant", "안녕하세요! 질문을 입력하고 필요하면 PDF/이미지를 📎로 첨부해 주세요.");
+  } catch (err) {
+    console.error(err);
+    renderBubble("assistant", `초기화 오류: ${err?.message || err}`);
+    setSending(true);
+  }
+})();
+
+/* ===== 전송 ===== */
+composer?.addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const text = userMessageEl.value.trim();
+  if (!text && pendingFiles.length === 0) return;
+
+  userMessageEl.value = "";
+  setSending(true);
+  try { await sendMessageFlow(text); }
+  catch (err) { console.error(err); renderBubble("assistant", `오류: ${err?.message || err}`); }
+  finally { setSending(false); }
+});
+
+/* Enter 전송 */
+userMessageEl?.addEventListener("keydown", (e) => {
+  if (e.key === "Enter" && !e.shiftKey) {
+    e.preventDefault();
+    composer?.requestSubmit();
+  }
+});
+
+/* 리셋 */
+resetThreadBtn?.addEventListener("click", () => {
+  const nickname = (document.getElementById("nicknameInput")?.value || "").trim() || "손님";
+  resetThread(assistantId, nickname);
+  renderBubble("assistant", "대화를 새로 시작합니다. (이전 맥락은 초기화됨)");
+});
+
+/* 버튼 바인딩 */
 issueCodeBtn?.addEventListener("click", async () => {
   issueCodeBtn.disabled = true;
   try { await generateAccessCode(); }
@@ -438,47 +855,3 @@ copyCodeBtn?.addEventListener("click", async () => {
   try { await navigator.clipboard.writeText(v); renderBubble("assistant", "코드를 클립보드에 복사했어요."); }
   catch { alert("복사에 실패했습니다. 수동으로 복사해 주세요."); }
 });
-
-/* ===== 디버그 헬퍼(브라우저 콘솔에서 사용) ===== */
-window.__whoami = async () => {
-  try {
-    const u = teacherAuth.currentUser;
-    await u?.getIdToken(true);
-    const r = await u?.getIdTokenResult();
-    console.log({
-      role: "teacherAuth([DEFAULT])",
-      uid: u?.uid || null,
-      email: u?.email || null,
-      isAnonymous: u?.isAnonymous || false,
-      claims: r?.claims || null,
-    });
-  } catch (e) { console.error(e); }
-};
-window.__whoamiStudent = async () => {
-  try {
-    const u = auth.currentUser;
-    await u?.getIdToken(true);
-    const r = await u?.getIdTokenResult();
-    console.log({
-      role: "studentAuth(student-app)",
-      uid: u?.uid || null,
-      email: u?.email || null,
-      isAnonymous: u?.isAnonymous || false,
-      claims: r?.claims || null,
-    });
-  } catch (e) { console.error(e); }
-};
-
-/* ===== Init ===== */
-(async function init() {
-  try {
-    loadNick();
-    await ensureAuth();
-    await loadChatbotMeta();
-    renderBubble("assistant", "안녕하세요! 질문을 입력하면 도와드릴게요. (첨부 자료가 있다면 우선적으로 근거를 사용합니다.)");
-  } catch (err) {
-    console.error(err);
-    renderBubble("assistant", `초기화 오류: ${err?.message || err}`);
-    setSending(true);
-  }
-})();

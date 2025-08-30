@@ -2,7 +2,9 @@
   "name": "functions",
   "private": true,
   "type": "module",
-  "engines": { "node": "20" },
+  "engines": {
+    "node": "20"
+  },
   "scripts": {
     "preapprove": "node tools/bulk-set-teachers.mjs preapproved.csv preapprove",
     "apply-now": "node tools/bulk-set-teachers.mjs preapproved.csv apply-now",

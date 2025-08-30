@@ -21,26 +21,47 @@
       <div class="spacer"></div>
     </div>
 
-    <!-- 본문 카드: 교사 코드만 표시 -->
+    <!-- 본문 카드: 교사 코드만 입력 -->
+    <!-- ✅ 폼에 autocomplete="off"를 적용해 브라우저 자동 채움 차단 -->
     <div class="card">
-      <label for="classCodeInput" class="label code-label">교사 코드</label>
-      <input id="classCodeInput" class="input" type="text" placeholder="예: 6자리 또는 영문-숫자" maxlength="24" />
-      <button id="startBtn" class="btn primary block">이 챗봇으로 시작</button>
+      <form id="joinForm" autocomplete="off" autocapitalize="off" spellcheck="false" novalidate>
+        <label for="classCodeInput" class="label code-label">교사 코드</label>
+
+        <!-- ✅ 입력 필드 단에서도 자동완성/자동수정/자동대문자화 모두 차단 -->
+        <!-- ✅ name을 일반적인 'code'가 아닌 'one-time-code'로 변경해 비밀번호 관리자 자동저장 우회 -->
+        <!-- ✅ inputmode를 numeric으로 지정 -->
+        <input
+          id="classCodeInput"
+          class="input"
+          type="text"
+          placeholder="예: 6자리 또는 영문-숫자"
+          maxlength="24"
+          inputmode="numeric"
+          autocomplete="off"
+          autocapitalize="off"
+          autocorrect="off"
+          name="one-time-code"
+        />
+
+        <button id="startBtn" class="btn primary block" type="button">이 챗봇으로 시작</button>
+        <p class="tiny">※ 닉네임은 이 기기에 저장됩니다. 교사 코드로 연결된 챗봇으로 이동합니다.</p>
+      </form>
     </div>
   </div>
 
-  <!-- 닉네임 먼저 설정 오버레이 -->
+  <!-- 닉네임 먼저 설정 오버레이: 처음 방문 시 자동 표시 -->
   <div id="nickOverlay" class="overlay" aria-hidden="true">
     <div class="modal" role="dialog" aria-modal="true" aria-labelledby="nickModalTitle">
       <h2 id="nickModalTitle">닉네임 설정</h2>
-      <p class="tiny">대화에 표시될 이름입니다. 브라우저에만 저장돼요.</p>
-      <input id="nickModalInput" class="input" type="text" placeholder="예: 과학짱" maxlength="20" />
+      <p class="tiny">대화에 표시될 이름입니다. 한 번 설정하면 다음부터 자동 사용돼요.</p>
+      <input id="nickModalInput" class="input" type="text" maxlength="20" />
       <div class="row">
-        <button id="nickModalSave" class="btn primary">저장</button>
+        <button id="nickModalSave" class="btn primary" type="button">저장</button>
       </div>
     </div>
   </div>
 
-  <script type="module" src="src/StudentLoginMain.js"></script>
+  <!-- ✅ 캐시 무력화를 위해 쿼리 스트링 버전 bump -->
+  <script type="module" src="src/StudentLoginMain.js?v=20250829"></script>
 </body>
 </html>

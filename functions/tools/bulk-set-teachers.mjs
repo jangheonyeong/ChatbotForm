@@ -117,20 +117,23 @@ function parseCSV(text) {
   console.log(`[bulk] rows: ${rows.length}, mode: ${mode}`);
 
   for (const { email, role, approvedBy } of rows) {
-    // 1) 사전 승인 문서 upsert
-    await db.doc(`preapproved_teachers/${email}`).set(
+    const emailId = (email || '').toLowerCase();
+
+    // 1) 사전 승인 문서 upsert  (A안 적용: email 필드도 같이 저장)
+    await db.doc(`preapproved_teachers/${emailId}`).set(
       {
+        email: emailId, // ← 추가: 함수들이 필드로 읽어도 매칭되도록
         role: role === 'admin' ? 'admin' : 'teacher',
         approvedBy: approvedBy || null,
         updatedAt: FieldValue.serverTimestamp(),
       },
       { merge: true }
     );
-    console.log(`[bulk] preapproved: ${email} -> ${role}`);
+    console.log(`[bulk] preapproved: ${emailId} -> ${role}`);
 
     if (mode === 'apply-now') {
       try {
-        const user = await auth.getUserByEmail(email);
+        const user = await auth.getUserByEmail(emailId);
 
         // 기존 커스텀클레임 유지 + 필요한 권한만 추가 병합
         const baseClaims = user.customClaims || {};
@@ -140,7 +143,7 @@ function parseCSV(text) {
 
         await db.doc(`teachers/${user.uid}`).set(
           {
-            email,
+            email: emailId,
             role: role === 'admin' ? 'admin' : 'teacher',
             active: true,
             approvedBy: approvedBy || null,
@@ -148,14 +151,14 @@ function parseCSV(text) {
           },
           { merge: true }
         );
-        console.log(`[bulk] applied: ${email}`);
+        console.log(`[bulk] applied: ${emailId}`);
       } catch (e) {
         if (e?.code === 'auth/user-not-found') {
           console.log(
-            `[bulk] ${email}: 아직 가입하지 않음 (가입 시 onCreate 트리거/관리 플로우에서 자동 반영)`
+            `[bulk] ${emailId}: 아직 가입하지 않음 (가입 시 onCreate 트리거/관리 플로우에서 자동 반영)`
           );
         } else {
-          console.error(`[bulk] ${email}: error`, e);
+          console.error(`[bulk] ${emailId}: error`, e);
         }
       }
     }

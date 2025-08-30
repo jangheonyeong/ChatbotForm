@@ -25,7 +25,7 @@
     <!-- ✅ 폼에 autocomplete="off"를 적용해 브라우저 자동 채움 차단 -->
     <div class="card">
       <form id="joinForm" autocomplete="off" autocapitalize="off" spellcheck="false" novalidate>
-        <label for="classCodeInput" class="label code-label">교사 코드</label>
+        <label for="classCodeInput" class="label code-label">코드</label>
 
         <!-- ✅ 입력 필드 단에서도 자동완성/자동수정/자동대문자화 모두 차단 -->
         <!-- ✅ name을 일반적인 'code'가 아닌 'one-time-code'로 변경해 비밀번호 관리자 자동저장 우회 -->
@@ -34,7 +34,7 @@
           id="classCodeInput"
           class="input"
           type="text"
-          placeholder="예: 6자리 또는 영문-숫자"
+          placeholder="6자리 숫자"
           maxlength="24"
           inputmode="numeric"
           autocomplete="off"
@@ -44,7 +44,7 @@
         />
 
         <button id="startBtn" class="btn primary block" type="button">이 챗봇으로 시작</button>
-        <p class="tiny">※ 닉네임은 이 기기에 저장됩니다. 교사 코드로 연결된 챗봇으로 이동합니다.</p>
+        <p class="tiny">선생님께서 제공한 6자리 코드를 입력하세요.</p>
       </form>
     </div>
   </div>

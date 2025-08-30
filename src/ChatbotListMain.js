@@ -5,6 +5,7 @@
 // - UI 라벨 "CSV 내보내기" → "대화 출력", 버튼 스타일은 CSS에서 개선
 // - 대화 출력: student_conversations 기반으로 기간 내 메시지까지 포함해 추출 (KST 자정~자정 포함)
 // - 🗓️ NEW: "대화 출력" 클릭 시 달력 모달에서 날짜를 선택(종료일 포함)
+// - ★ 대화 출력 필터에 assistantId(선택) 추가 + 스코프 오류 수정(assistantId를 인자로 전달)
 
 import { initializeApp, getApps } from "firebase/app";
 import { getAuth, onAuthStateChanged } from "firebase/auth";
@@ -186,10 +187,18 @@ function tsToKSTString(ts) {
   if (!ts) return "";
   const date = ts?.toDate?.() ? ts.toDate() : (ts instanceof Date ? ts : null);
   if (!date) return "";
-  const kst = new Date(date.getTime() + 9 * 60 * 60 * 1000);
-  const z = n => String(n).padStart(2,"0");
-  return `${kst.getFullYear()}-${z(kst.getMonth()+1)}-${z(kst.getDate())} ${z(kst.getHours())}:${z(kst.getMinutes())}:${z(kst.getSeconds())}`;
+
+  const parts = new Intl.DateTimeFormat('en-GB', {
+    timeZone: 'Asia/Seoul',
+    year: 'numeric', month: '2-digit', day: '2-digit',
+    hour: '2-digit', minute: '2-digit', second: '2-digit',
+    hour12: false
+  }).formatToParts(date);
+
+  const get = (type) => parts.find(p => p.type === type)?.value || "";
+  return `${get('year')}-${get('month')}-${get('day')} ${get('hour')}:${get('minute')}:${get('second')}`;
 }
+
 
 function toCSV(rows) {
   const header = [
@@ -208,20 +217,23 @@ function toCSV(rows) {
   return lines.join("\r\n");
 }
 
+// ★ assistantId(선택)를 인자로 받아서 where 절을 동적으로 구성
 async function exportSubjectCSV_fromStudentConversations({
-  subject, teacherUid, startStr, endStr
+  subject, teacherUid, startStr, endStr, assistantId = null
 }) {
   // 1) 날짜 파싱 → KST 종일 범위(포함) → UTC
   const [sy, sm, sd] = startStr.split("-").map(Number);
   const [ey, em, ed] = endStr.split("-").map(Number);
   const { startUtc, endUtc } = kstDayRangeInclusive(sy, sm, sd, ey, em, ed);
 
-  // 2) 대화 목록 (교사+교과) 조회 — createdAt 범위는 메시지에서 필터링
-  const convQ = query(
-    collection(db, "student_conversations"),
+  // 2) 대화 목록 (교사+교과 [+ assistantId]) 조회 — createdAt 범위는 메시지에서 필터링
+  const whereClauses = [
     where("teacherUid", "==", teacherUid),
-    where("subject", "==", subject)
-  );
+    where("subject", "==", subject),
+  ];
+  if (assistantId) whereClauses.push(where("assistantId", "==", assistantId)); // ★ 선택적 필터
+
+  const convQ = query(collection(db, "student_conversations"), ...whereClauses);
   const convSnap = await getDocs(convQ);
 
   const rows = [];
@@ -258,7 +270,7 @@ async function exportSubjectCSV_fromStudentConversations({
   // 4) CSV 다운로드
   const csv = toCSV(rows);
   const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
-  const fname = `export_${subject}_${startStr}_${endStr}.csv`;
+  const fname = `export_${subject}_${startStr}_${endStr}${assistantId ? `_assistant_${assistantId}` : ""}.csv`;
   const url = URL.createObjectURL(blob);
   const a = Object.assign(document.createElement("a"), { href: url, download: fname });
   document.body.appendChild(a);
@@ -492,7 +504,8 @@ function renderCard(docSnap, user){
         subject,
         teacherUid: data.ownerUid || data.uid || user.uid || "",
         startStr: picked.startStr,
-        endStr: picked.endStr
+        endStr: picked.endStr,
+        assistantId: data.assistantId || null // ★ 스코프 내 data에서 인자로 전달
       });
       toast("📄 대화 출력(CSV) 완료");
     } catch (e) {
@@ -531,9 +544,9 @@ function renderCard(docSnap, user){
         let newlyOk = 0;
         const pendingFiles = [];
 
-        const ragList = normalizeRagFiles(data);
-        for (let i = 0; i < ragList.length; i++) {
-          const m = ragList[i];
+        const ragList2 = normalizeRagFiles(data);
+        for (let i = 0; i < ragList2.length; i++) {
+          const m = ragList2[i];
           const filename = m?.name || `document_${i+1}.pdf`;
 
           if (byName.has(filename)) {
@@ -553,7 +566,7 @@ function renderCard(docSnap, user){
           try {
             const blob = await downloadPdfBlob(m);
             const file = new File([blob], filename, { type: "application/pdf" });
-            toast(`파일 업로드 중… (${i+1}/${ragList.length})`);
+            toast(`파일 업로드 중… (${i+1}/${ragList2.length})`);
             const up = await uploadFileToOpenAI(file);
             await attachToVS(vectorStoreId, up.id);
             try {

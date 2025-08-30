@@ -145,6 +145,6 @@ idCancelBtn?.addEventListener("click", () => { closeIdOverlay(); });
 
 /* ───────── UX: 버튼 텍스트(선택) ───────── */
 onAuthStateChanged(auth, (user) => {
-  if (teacherBtn) teacherBtn.textContent = user ? "교사로 계속" : "Google로 로그인";
+  if (teacherBtn) teacherBtn.textContent = user ? "교사로 시작" : "Google로 로그인";
   // 학생 버튼 문구는 고정
 });

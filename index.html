@@ -5,17 +5,68 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>챗봇 제작 요청 포털</title>
   <link rel="stylesheet" href="indexStyles.css" />
+  <!-- 모달이 처음부터 보이는 문제 방지 + 기본 오버레이 스타일 -->
+  <style>
+    .overlay[hidden] { display: none !important; }
+    .overlay {
+      position: fixed; inset: 0; display: flex; align-items: center; justify-content: center;
+      background: rgba(0,0,0,.35); z-index: 1000; padding: 16px;
+    }
+    .modal {
+      background: #fff; border-radius: 12px; width: min(420px, 92vw);
+      box-shadow: 0 12px 30px rgba(0,0,0,.18); padding: 20px;
+    }
+    .row { display: flex; gap: 8px; justify-content: flex-end; margin-top: 12px; }
+    .input { width: 100%; padding: 10px 12px; border: 1px solid #d7dbe0; border-radius: 10px; }
+    .label { display:block; font-weight:600; margin:8px 0 6px; }
+    .tiny { color:#667085; font-size:12px; margin-top:6px; }
+    .btn { padding:10px 14px; border-radius:10px; border:0; cursor:pointer }
+    .btn.primary { background:#0f3d8f; color:#fff; }
+    .btn.ghost { background:#eef2f7; color:#0f3d8f; }
+  </style>
 </head>
 <body>
   <div class="container">
-    <h1>챗봇 제작 요청 포털</h1>
-    <p class="subtitle">외부 요청을 효율적으로 관리하고 제작할 수 있는 시스템</p>
+    <h1>챗봇 제작 및 활용</h1>
+    <p class="subtitle"></p>
 
-    <div class="button-group">
-      <button id="googleLoginBtn">Google로 로그인</button>
+    <div class="split">
+      <!-- 학생 카드 -->
+      <div class="card">
+        <h2>학생</h2>
+        <p class="hint">선생님께서 제공한 <b>아이디/비밀번호</b>로 로그인합니다.</p>
+        <button id="studentStartBtn" class="btn primary" type="button">학생으로 시작</button>
+      </div>
+
+      <!-- 교사 카드 -->
+      <div class="card">
+        <h2>교사</h2>
+        <p class="hint">구글 계정으로 로그인 후 챗봇을 제작/관리합니다.</p>
+        <button id="googleLoginBtn" class="btn" type="button">교사로 시작</button>
+        <p class="tiny">교사용 페이지는 승인된 계정만 접근 가능합니다.</p>
+      </div>
     </div>
   </div>
 
-  <script type="module" src="src/indexMain.js"></script>
+  <!-- 학생 아이디/비밀번호 입력 모달 (초기에는 숨김) -->
+  <div id="studentIdOverlay" class="overlay" hidden aria-hidden="true">
+    <div class="modal" role="dialog" aria-modal="true" aria-labelledby="studentIdTitle">
+      <h2 id="studentIdTitle">학생 아이디 입력</h2>
+      <p class="tiny">선생님께서 제공한 아이디와 비밀번호를 입력하세요.</p>
+
+      <label for="studentIdInput" class="label">아이디</label>
+      <input id="studentIdInput" class="input" type="text" maxlength="64" />
+
+      <label for="studentPwInput" class="label">비밀번호</label>
+      <input id="studentPwInput" class="input" type="password" maxlength="64" />
+
+      <div class="row">
+        <button id="studentIdCancelBtn" class="btn ghost" type="button">취소</button>
+        <button id="studentIdConfirmBtn" class="btn primary" type="button">확인</button>
+      </div>
+    </div>
+  </div>
+
+  <script type="module" src="src/indexMain.js?v=20250827"></script>
 </body>
 </html>

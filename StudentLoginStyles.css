@@ -1,0 +1,151 @@
+/* 공통 레이아웃 & 테마 */
+*,
+*::before,
+*::after { box-sizing: border-box; }
+
+:root {
+  --brand: #003478;
+  --brand-hover: #0050aa;
+  --bg: #f7f9fc;
+  --card: #fff;
+  --muted: #6b7280;
+  --border: #e5eaf1;
+  --chip-bg: #eaf1ff;
+  --chip-fg: #0b1c3f;
+}
+
+body {
+  margin: 0;
+  font-family: "Noto Sans KR", system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+  background: var(--bg);
+  min-height: 100vh;
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+}
+
+/* 상단 */
+.container {
+  width: min(960px, 94vw);
+  margin: 36px auto 48px;
+}
+
+.topbar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.left-wrap {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.topbar h1 {
+  margin: 0 6px 0 0;
+  font-size: 22px;
+  color: var(--brand);
+}
+
+.spacer { flex: 1; }
+
+.home-btn {
+  background: var(--brand);
+  padding: 8px 10px;
+  border-radius: 10px;
+  display: inline-flex;
+}
+
+/* 닉네임 표시 + 수정 */
+.nick-badge {
+  border: 1px solid var(--border);
+  background: var(--chip-bg);
+  color: var(--chip-fg);
+  padding: 6px 10px;
+  border-radius: 999px;
+  font-size: 13px;
+}
+
+.edit-btn {
+  padding: 6px 10px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: #fff;
+  color: #0b1c3f;
+  cursor: pointer;
+  font-size: 12px;
+}
+.edit-btn:hover { background: #f3f6fb; }
+
+/* 카드 */
+.card {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 20px;
+  box-shadow: 0 6px 18px rgba(0,0,0,.06);
+}
+
+.label {
+  display: block;
+  margin: 8px 0 6px;
+  font-size: 13px;
+  color: #374151;
+}
+
+.input {
+  width: 100%;
+  padding: 10px 12px;
+  border: 1px solid #d2dae3;
+  border-radius: 10px;
+  font-size: 14px;
+  outline: none;
+  background: #fff;
+}
+
+/* 버튼 */
+.row { display: flex; gap: 10px; margin-top: 12px; }
+
+.btn {
+  flex: 1;
+  padding: 12px 16px;
+  font-size: 15px;
+  border: none;
+  border-radius: 10px;
+  cursor: pointer;
+  transition: background-color .2s, opacity .2s;
+  color: #fff;
+  background: var(--brand);
+}
+.btn:hover { background: var(--brand-hover); }
+.btn.primary { background: var(--brand); }
+.btn.primary:hover { background: var(--brand-hover); }
+.btn.block { width: 100%; margin-top: 12px; }
+
+.tiny { margin-top: 8px; color: #8a94a6; font-size: 12px; }
+
+/* 닉네임 오버레이 */
+.overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(7, 19, 44, 0.45);
+  display: none;
+  align-items: center;
+  justify-content: center;
+  padding: 18px;
+  z-index: 50;
+}
+.overlay.open { display: flex; }
+
+.modal {
+  width: min(520px, 95vw);
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  padding: 20px;
+  box-shadow: 0 12px 30px rgba(0,0,0,.2);
+}
+.modal h2 { margin: 0 0 8px; font-size: 20px; color: var(--brand); }

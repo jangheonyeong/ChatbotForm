@@ -4,12 +4,11 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>챗봇 제작</title>
+
+  <!-- 외부 스타일 -->
   <link rel="stylesheet" href="CreateChatbotStyles.css" />
 
-  <!-- ❌ 삭제: polyfill.io -->
-  <!-- <script src="https://polyfill.io/v3/polyfill.min.js?features=es6"></script> -->
-
-  <!-- ✅ 수식 표현과 마크다운 지원 -->
+  <!-- 수식/마크다운 -->
   <script id="MathJax-script" async src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
 </head>
@@ -25,59 +24,83 @@
     <!-- 챗봇 제작 폼 -->
     <div class="form-panel">
       <h2>챗봇 제작</h2>
-      <form id="chatbotForm">
+      <form id="chatbotForm" autocomplete="off">
         <input type="hidden" id="chatbotId" />
-        
+
         <label for="subject">교과</label>
-        <input type="text" id="subject" name="subject" required />
+        <input type="text" id="subject" name="subject" required autocomplete="off" />
 
         <label for="name">이름</label>
-        <input type="text" id="name" name="name" required />
+        <input type="text" id="name" name="name" required autocomplete="off" />
 
-        <label for="description">설명</label>
-        <textarea id="description" name="description" required></textarea>
+        <!-- ▼ 모델 선택 추가 -->
+        <label for="modelSelect">모델 선택</label>
+        <div class="model-row">
+          <select id="modelSelect" name="model" autocomplete="off">
+            <option value="gpt-4o-mini" selected>gpt-4o-mini (기본)</option>
+            <option value="gpt-4o">gpt-4o</option>
+            <option value="gpt-4.1-mini">gpt-4.1-mini</option>
+            <option value="gpt-4.1">gpt-4.1</option>
+            <option value="o4-mini">o4-mini</option>
+            <option value="o3-mini">o3-mini (reasoning)</option>
+            <option value="custom">직접 입력…</option>
+          </select>
+          <input type="text" id="customModelId" class="hidden" placeholder="커스텀 모델 ID를 입력하세요" autocomplete="off" />
+        </div>
+        <!-- ▲ 모델 선택 추가 끝 -->
 
-        <label><input type="checkbox" id="ragToggle" /> RAG</label>
+        <label for="description">설명(시스템 프롬프트)</label>
+        <textarea id="description" name="description" placeholder="예) 업로드 문서를 근거로만 답하세요. 근거 없으면 모른다고 답하세요." required autocomplete="off"></textarea>
+
+        <div class="status" id="ragStatus"><span class="dot"></span><span class="text">RAG 준비 전</span></div>
+        <br /><br />
+
+        <label><input type="checkbox" id="ragToggle" /> RAG(File Search)</label>
         <div id="ragUpload" class="hidden">
           <label for="ragFile">PDF 업로드</label>
-          <input type="file" id="ragFile" accept=".pdf" />
+          <input type="file" id="ragFile" accept=".pdf" multiple />
           <div id="ragFileLink"></div>
+          <!-- ▼ 업로드한 PDF 삭제 버튼 -->
+          <button type="button" id="deleteRagFileBtn" class="file-del-btn hidden">업로드 파일 삭제</button>
         </div>
 
         <label><input type="checkbox" id="fewShotToggle" /> few-shot</label>
         <div id="fewShotContainer" class="hidden">
+          <p style="margin:6px 0 8px;">형식: <code>사용자 예시 → 모델 답</code> ( <code>-></code>, <code>=&gt;</code>, <code>|</code>, <code>:</code> 도 가능 )</p>
           <div id="examplesArea">
             <div class="example-block">
-              <textarea class="example-input" placeholder="예시를 입력하세요."></textarea>
+              <textarea class="example-input" placeholder="예) 피타고라스 정리 알려줘 → 직각삼각형에서..."></textarea>
               <button type="button" class="delete-example">✕</button>
             </div>
           </div>
           <button type="button" id="addExample">+ 예시 추가</button>
         </div>
 
-        <label><input type="checkbox" id="selfConsistency" /> self-consistency</label>
+        <label><input type="checkbox" id="selfConsistency" /> self-consistency(다수결)</label>
 
-        <button type="submit">저장하기</button>
-        <button type="button" id="testButton">테스트하기</button>
+        <div style="display:flex; gap:8px; margin-top:10px;">
+          <button type="submit">저장하기</button>
+          <button type="button" id="testButton">테스트하기</button>
+        </div>
       </form>
     </div>
 
-    <!-- 실시간 미리보기 -->
+    <!-- 미리보기 -->
     <div class="preview-panel">
       <h3>실시간 챗봇 미리보기</h3>
       <div id="chatWindow" class="chat-window"></div>
       <div class="input-panel">
-        <label class="upload-icon">
+        <label class="upload-icon" title="이미지 첨부(미사용)">
           📎
           <input type="file" id="imageInput" accept="image/*" hidden />
         </label>
-        <input type="text" id="userMessage" placeholder="메시지를 입력하세요..." />
-        <button id="sendMessage">➤</button>
+        <input type="text" id="userMessage" placeholder="메시지를 입력하세요..." autocomplete="off" />
+        <button id="sendMessage" type="button">➤</button>
       </div>
     </div>
   </div>
 
-  <!-- ✅ JS 모듈 로드 -->
+  <!-- 메인 스크립트 -->
   <script type="module" src="src/CreateChatbotMain.js"></script>
 </body>
 </html>

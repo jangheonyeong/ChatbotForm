@@ -1,4 +1,4 @@
-# Logs
+# ───────── Logs ─────────
 logs
 *.log
 npm-debug.log*
@@ -7,21 +7,59 @@ yarn-error.log*
 pnpm-debug.log*
 lerna-debug.log*
 
-node_modules
-dist
-dist-ssr
-*.local
+# ───────── Node deps / Build outputs ─────────
+node_modules/
+functions/node_modules/
+dist/
+dist-ssr/
+build/
+.vite/
+.cache/
+coverage/
+coverage-*/
 
-# Editor directories and files
-.vscode/*
+# ───────── Python / Jupyter ─────────
+.venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ipynb_checkpoints/
+
+# ───────── Editors / OS ─────────
+.vscode/
 !.vscode/extensions.json
-.idea
+.idea/
 .DS_Store
+Thumbs.db
 *.suo
 *.ntvs*
 *.njsproj
 *.sln
 *.sw?
 
+# ───────── TypeScript build info(있으면) ─────────
+*.tsbuildinfo
+tsconfig.tsbuildinfo
+functions/*.tsbuildinfo
 
+# ───────── Firebase / Functions ─────────
+.firebase/
+# TypeScript로 Functions를 빌드한다면 산출물 폴더도 무시
+functions/lib/
+# Functions 쪽 환경/키
+functions/.env
+functions/.env.*
+functions/keys/
+
+# ───────── Env & Secrets ─────────
 .env
+.env.*
+*.secret.json
+firebase-admin.json
+keys/
+
+# ───────── Project-specific ─────────
+teachers.csv
+
+# ───────── Misc ─────────
+*.local

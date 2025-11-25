@@ -15,7 +15,7 @@ export const TEACHER_EMAILS = [
 ];
 
 export const ADMIN_EMAILS = [
-    // 관리자 허용
+  "wkdgjsdud@snu.ac.kr"
 ];
 
 // 공통 유틸 및 판별 함수

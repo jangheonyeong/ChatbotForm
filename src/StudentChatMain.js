@@ -46,11 +46,15 @@ const userMessageEl = document.getElementById("userMessage");
 const sendBtn = document.getElementById("sendBtn");
 const resetThreadBtn = document.getElementById("resetThreadBtn");
 
-// 교사 전용 UI
+// 교사 전용 UI + 힌트 버튼
 const issueCodeBtn = document.getElementById("issueCodeBtn");
 const codePanel = document.getElementById("codePanel");
 const codeText = document.getElementById("codeText");
 const copyCodeBtn = document.getElementById("copyCodeBtn");
+const hintButtonsWrap = document.getElementById("hintButtons");
+const hintBtn1 = document.getElementById("hintBtn1");
+const hintBtn2 = document.getElementById("hintBtn2");
+const hintBtn3 = document.getElementById("hintBtn3");
 
 // 첨부 DOM
 const attachBtn = document.getElementById("attachBtn");
@@ -205,19 +209,16 @@ function setSending(on) {
   attachBtn.disabled = on;
 }
 
-/* ===== Nickname ===== */
-const NICK_KEY = "student_nickname";
-function loadNick() {
-  const n = localStorage.getItem(NICK_KEY) || "";
-  const input = document.getElementById("nicknameInput");
-  if (input) input.value = n;
-  return n;
+/* ===== Student ID (닉네임 대신 사용) ===== */
+const LAST_STUDENT_ID_KEY = "last_student_id";
+function getCurrentStudentId() {
+  return localStorage.getItem(LAST_STUDENT_ID_KEY) || "손님";
 }
 
 /* ===== Thread/Conversation ===== */
-function threadKey(aid, nickname) { return `thread:${aid}:${nickname || "guest"}`; }
-async function getOrCreateThread(aid, nickname) {
-  const key = threadKey(aid, nickname);
+function threadKey(aid, studentId) { return `thread:${aid}:${studentId || "guest"}`; }
+async function getOrCreateThread(aid, studentId) {
+  const key = threadKey(aid, studentId);
   let tid = localStorage.getItem(key);
   if (tid) return tid;
   const t = await createThread();
@@ -225,8 +226,8 @@ async function getOrCreateThread(aid, nickname) {
   localStorage.setItem(key, tid);
   return tid;
 }
-function resetThread(aid, nickname) { localStorage.removeItem(threadKey(aid, nickname)); }
-function convKey(aid, nickname) { return `conv:${aid}:${nickname || "guest"}`; }
+function resetThread(aid, studentId) { localStorage.removeItem(threadKey(aid, studentId)); }
+function convKey(aid, studentId) { return `conv:${aid}:${studentId || "guest"}`; }
 
 let assistantId = null;
 let chatbotDocId = null;
@@ -234,6 +235,9 @@ let teacherUid = null;
 let subjectStr = "";
 let modelStr = "";
 let conversationId = null;
+let hint1 = "";
+let hint2 = "";
+let hint3 = "";
 
 /* ===== Auth ===== */
 function waitForAuthUser(auth, timeoutMs = 8000) {
@@ -325,8 +329,8 @@ async function ensureConversation() {
   const u = await ensureAuth();
   if (!u) return null;
 
-  const nickname = (document.getElementById("nicknameInput")?.value || "").trim() || "손님";
-  const key = convKey(assistantId, nickname);
+  const studentId = getCurrentStudentId();
+  const key = convKey(assistantId, studentId);
   let convId = localStorage.getItem(key);
 
   // 규칙 통과용 payload (모든 필드 string 타입 보장, createdBy는 빈 문자열이라도 null 금지)
@@ -336,7 +340,7 @@ async function ensureConversation() {
     model: String(modelStr || ""),
     teacherUid: String(teacherUid || ""),
     chatbotDocId: String(chatbotDocId || ""),
-    studentNickname: nickname,
+    studentNickname: studentId,
     createdBy: String(authStudent.currentUser?.uid || authDefault.currentUser?.uid || ""),
     createdAt: serverTimestamp(),
     updatedAt: serverTimestamp(),
@@ -412,6 +416,11 @@ async function loadChatbotMeta() {
         }
         if (!qModel && data.assistantModelSnapshot) modelStr = data.assistantModelSnapshot;
         if (!teacherUid && (data.ownerUid || data.uid)) teacherUid = data.ownerUid || data.uid;
+
+        // 힌트 필드 로드
+        hint1 = data.hint1 || "";
+        hint2 = data.hint2 || "";
+        hint3 = data.hint3 || "";
       }
     } catch (err) {
       console.warn("Firestore 읽기 실패(무시 가능):", err?.message || err);
@@ -433,6 +442,17 @@ async function loadChatbotMeta() {
   if (!assistantId) {
     throw new Error("assistantId가 없습니다. URL에 ?assistant=asst_xxx 또는 ?code=###### 또는 ?id=<문서ID> 중 하나가 필요합니다.");
   }
+
+  // 수학 과목인 경우에만 힌트 버튼 표시
+  try {
+    const subj = (subjectStr || "").trim();
+    const hasAnyHint = !!(hint1 || hint2 || hint3);
+    if (subj === "수학" && hasAnyHint && hintButtonsWrap) {
+      hintButtonsWrap.style.display = "flex";
+    } else if (hintButtonsWrap) {
+      hintButtonsWrap.style.display = "none";
+    }
+  } catch {}
 }
 
 /* ===== 파일 첨부 ===== */
@@ -611,8 +631,8 @@ async function renderAssistantMarkdownSmart(text) {
 
 /* ===== 채팅 플로우 ===== */
 async function sendMessageFlow(text) {
-  const nickname = (document.getElementById("nicknameInput")?.value || "").trim() || "손님";
-  const threadId = await getOrCreateThread(assistantId, nickname);
+  const studentId = getCurrentStudentId();
+  const threadId = await getOrCreateThread(assistantId, studentId);
 
   await ensureConversation();
 
@@ -662,6 +682,42 @@ async function sendMessageFlow(text) {
     await renderAssistantMarkdownSmart(textValue);
     await logMessage("assistant", cleanCitations(textValue));
     break;
+  }
+}
+
+/* ===== 힌트 로그 기록 ===== */
+async function logHintClick(hintKey, content) {
+  try {
+    await ensureConversation();
+    if (!conversationId) return;
+    await addDoc(collection(db, `${CONV_COL}/${conversationId}/hintlogs`), {
+      hintKey,
+      content,
+      clickedAt: serverTimestamp()
+    });
+  } catch (e) {
+    console.warn("logHintClick failed:", e?.message || e);
+  }
+}
+
+/* ===== 힌트 클릭 처리 ===== */
+async function handleHintClick(hintKey) {
+  let content = "";
+  if (hintKey === "hint1") content = hint1;
+  else if (hintKey === "hint2") content = hint2;
+  else if (hintKey === "hint3") content = hint3;
+
+  content = (content || "").trim();
+  if (!content) return;
+
+  try {
+    // 힌트를 assistant 메시지로 표시
+    await renderAssistantMarkdownSmart(content);
+    await logMessage("assistant", cleanCitations(content));
+    // 힌트 클릭 로그 저장
+    await logHintClick(hintKey, content);
+  } catch (e) {
+    console.error("handleHintClick:", e?.message || e);
   }
 }
 
@@ -801,7 +857,7 @@ onAuthStateChanged(authDefault, async (user) => {
 /* ===== Init ===== */
 (async function init() {
   try {
-    loadNick();
+    getCurrentStudentId();
     const u = await ensureAuth();
     if (!u) return;
 
@@ -837,8 +893,8 @@ userMessageEl?.addEventListener("keydown", (e) => {
 
 /* 리셋 */
 resetThreadBtn?.addEventListener("click", () => {
-  const nickname = (document.getElementById("nicknameInput")?.value || "").trim() || "손님";
-  resetThread(assistantId, nickname);
+  const studentId = getCurrentStudentId();
+  resetThread(assistantId, studentId);
   renderBubble("assistant", "대화를 새로 시작합니다. (이전 맥락은 초기화됨)");
 });
 
@@ -855,3 +911,8 @@ copyCodeBtn?.addEventListener("click", async () => {
   try { await navigator.clipboard.writeText(v); renderBubble("assistant", "코드를 클립보드에 복사했어요."); }
   catch { alert("복사에 실패했습니다. 수동으로 복사해 주세요."); }
 });
+
+// 힌트 버튼 클릭 바인딩
+hintBtn1?.addEventListener("click", () => handleHintClick("hint1"));
+hintBtn2?.addEventListener("click", () => handleHintClick("hint2"));
+hintBtn3?.addEventListener("click", () => handleHintClick("hint3"));

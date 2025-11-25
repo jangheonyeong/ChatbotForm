@@ -8,16 +8,21 @@ import {
   onAuthStateChanged,
   signInWithEmailAndPassword
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
+import {
+  getFirestore, doc, getDoc
+} from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 import { firebaseConfig } from "../firebaseConfig.js";
 import { isTeacher, isAdmin } from "./rolesMain.js";
 
 /* ===== Firebase ===== */
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
+const db = getFirestore(app);
 
 /* ===== 상수 ===== */
 const CLASS_EMAIL_DOMAIN = "class.local";         // 내부용 도메인
 const LAST_STUDENT_ID_KEY = "last_student_id";    // 최근 아이디 저장
+const ROLE_KEY = "user_role";                     // 사용자 role 저장 키
 
 /* ===== Google Provider(교사용) ===== */
 const provider = new GoogleAuthProvider();
@@ -73,8 +78,29 @@ async function confirmStudentLogin() {
   const email = `${localId}@${CLASS_EMAIL_DOMAIN}`;
 
   try {
-    await signInWithEmailAndPassword(auth, email, pwd);
+    const userCredential = await signInWithEmailAndPassword(auth, email, pwd);
+    const user = userCredential.user;
+    
+    // localStorage에 학생 ID 저장
     localStorage.setItem(LAST_STUDENT_ID_KEY, localId);
+    
+    // Firestore에서 role 가져오기
+    let role = "student"; // 기본값
+    try {
+      const profileRef = doc(db, "student_profiles", user.uid);
+      const profileSnap = await getDoc(profileRef);
+      if (profileSnap.exists()) {
+        const profileData = profileSnap.data();
+        // student_profiles에 role이 있으면 사용, 없으면 기본값 'student'
+        role = profileData.role || "student";
+      }
+    } catch (e) {
+      console.warn("role 조회 실패, 기본값 사용:", e?.message || e);
+    }
+    
+    // localStorage에 role 저장
+    localStorage.setItem(ROLE_KEY, role);
+    
     closeIdOverlay();
     // 로그인 성공 → 교사 코드 입력/닉네임 화면으로 이동
     location.href = "StudentLogin.html";
@@ -110,7 +136,7 @@ async function startAsTeacher() {
   }
 }
 
-/* ───────── 교사용 리다이렉트 복귀 ───────── */
+/* ───────── 관리자용 리다이렉트 복귀 ───────── */
 getRedirectResult(auth)
   .then((res) => {
     if (!res?.user) return;
@@ -119,7 +145,7 @@ getRedirectResult(auth)
     if (flow === "teacher") {
       const email = res.user?.email || "";
       if (!(isTeacher(email) || isAdmin(email))) {
-        alert("승인된 교사 계정이 아닙니다.");
+        alert("승인된 관리자 계정이 아닙니다.");
         auth.signOut();
         location.href = "index.html";
         return;
@@ -145,6 +171,6 @@ idCancelBtn?.addEventListener("click", () => { closeIdOverlay(); });
 
 /* ───────── UX: 버튼 텍스트(선택) ───────── */
 onAuthStateChanged(auth, (user) => {
-  if (teacherBtn) teacherBtn.textContent = user ? "교사로 시작" : "Google로 로그인";
+  if (teacherBtn) teacherBtn.textContent = user ? "관리자로 시작" : "Google로 로그인";
   // 학생 버튼 문구는 고정
 });

@@ -5,7 +5,6 @@ import {
   signInWithPopup,
   signInWithRedirect,
   getRedirectResult,
-  onAuthStateChanged,
   signInWithEmailAndPassword
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
 import {
@@ -169,8 +168,4 @@ idCancelBtn?.addEventListener("click", () => { closeIdOverlay(); });
   });
 });
 
-/* ───────── UX: 버튼 텍스트(선택) ───────── */
-onAuthStateChanged(auth, (user) => {
-  if (teacherBtn) teacherBtn.textContent = user ? "관리자로 시작" : "Google로 로그인";
-  // 학생 버튼 문구는 고정
-});
+/* ───────── UX: 추가 동작 없음 ───────── */

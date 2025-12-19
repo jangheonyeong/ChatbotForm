@@ -327,9 +327,10 @@ async function startChatWithChatbot(chatbotId) {
     
     const chatbotData = chatbotSnap.data();
     
-    // StudentChat.html로 이동
+    // StudentChat.html로 이동 (새 대화 시작을 위해 new=true 플래그 추가)
     const url = new URL("StudentChat.html", location.origin);
     url.searchParams.set("id", chatbotId);
+    url.searchParams.set("new", "true"); // ✅ 새 대화 시작 플래그
     
     if (chatbotData.assistantId) {
       url.searchParams.set("assistant", chatbotData.assistantId);

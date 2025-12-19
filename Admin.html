@@ -7,14 +7,34 @@
   <link rel="stylesheet" href="AdminStyles.css" />
 </head>
 <body>
-  <div class="mindmap-wrapper">
-    <h1>교과별 챗봇 요청 마인드맵</h1>
-    <div class="mindmap-container">
-      <!-- 🎯 좌표계 맞춤 -->
-      <svg id="connector-lines" viewBox="0 0 800 800" width="800" height="800" preserveAspectRatio="none"></svg>
-      <div class="center-node">챗봇</div>
-      <div id="subject-nodes"></div>
-    </div>
+  <!-- 🔹 왼쪽 상단 로그아웃 버튼 -->
+  <a href="index.html" class="logout-btn">로그아웃</a>
+
+  <div class="admin-shell">
+    <header class="admin-header">
+      <p class="eyebrow">ADMIN DASHBOARD</p>
+      <h1>교과별 챗봇 허브</h1>
+      <p class="subcopy">
+        승인된 관리자만 접근할 수 있는 챗봇 제작·배포 공간입니다.
+      </p>
+    </header>
+
+    <section class="mindmap-wrapper">
+      <div class="mindmap-card">
+        <div class="mindmap-container">
+          <!-- 🎯 좌표계 맞춤 -->
+          <svg
+            id="connector-lines"
+            viewBox="0 0 800 800"
+            width="800"
+            height="800"
+            preserveAspectRatio="none"
+          ></svg>
+          <div class="center-node">챗봇 허브</div>
+          <div id="subject-nodes"></div>
+        </div>
+      </div>
+    </section>
   </div>
 
   <!-- ✅ 관리자 접근 가드: 반드시 메인 스크립트보다 먼저 로드 -->

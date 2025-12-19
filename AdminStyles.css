@@ -1,33 +1,123 @@
 body {
   margin: 0;
   font-family: "Noto Sans KR", sans-serif;
-  background-color: #f4f6fa;
-  padding: 20px;
+  background: radial-gradient(circle at top, #e8ecf8, #dde4f2 40%, #d1d9ec);
+  min-height: 100vh;
+  color: #0b1c3f;
+}
+
+/* 🔹 왼쪽 상단 로그아웃 버튼 */
+.logout-btn {
+  position: fixed;
+  top: 16px;
+  left: 16px;
+  padding: 8px 16px;
+  border-radius: 999px;
+  border: none;
+  background: #003478;
+  color: #ffffff;
+  font-size: 14px;
+  text-decoration: none;
+  cursor: pointer;
+  z-index: 1000;
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.15);
+}
+.logout-btn:hover {
+  background: #0050aa;
+}
+
+.admin-shell {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 48px 32px 64px;
+}
+
+.admin-header {
   text-align: center;
+  margin-bottom: 32px;
+}
+
+.eyebrow {
+  letter-spacing: 0.3em;
+  font-size: 13px;
+  font-weight: 600;
+  color: #6d7aa6;
+  margin: 0 0 8px;
 }
 
 h1 {
-  color: #003478;
-  margin-bottom: 40px;
+  margin: 0 0 12px;
+  font-size: clamp(32px, 4vw, 40px);
+  color: #0b2466;
+}
+
+.subcopy {
+  margin: 0 auto;
+  max-width: 640px;
+  color: #5b678a;
+  line-height: 1.6;
 }
 
 .mindmap-wrapper {
-  position: relative;
   display: flex;
-  flex-direction: column;
-  align-items: center;
+  justify-content: center;
+}
+
+.mindmap-card {
+  width: 100%;
+  max-width: 1000px;
+  background: rgba(255, 255, 255, 0.92);
+  border-radius: 28px;
+  box-shadow:
+    0 40px 90px rgba(15, 61, 143, 0.15),
+    inset 0 0 0 1px rgba(11, 36, 102, 0.08);
+  padding: 32px;
+  backdrop-filter: blur(12px);
+}
+
+.mindmap-card__head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 16px;
+  margin-bottom: 20px;
+}
+
+.mindmap-card__head h2 {
+  margin: 0;
+  font-size: 20px;
+  color: #112864;
+}
+
+.mindmap-card__head p {
+  margin: 6px 0 0;
+  color: #6b789f;
+  font-size: 14px;
+}
+
+.legend-pill {
+  border: none;
+  background: linear-gradient(135deg, #0f3d8f, #0b2466);
+  color: #fff;
+  padding: 10px 22px;
+  border-radius: 999px;
+  font-size: 13px;
+  opacity: 0.8;
+  cursor: default;
 }
 
 .mindmap-container {
   position: relative;
   width: 800px;
   height: 800px;
+  margin: 0 auto;
+  transform-origin: center;
 }
 
 #connector-lines {
   position: absolute;
-  top: 0;
-  left: 0;
+  inset: 0;
   z-index: 0;
   pointer-events: none;
 }
@@ -37,37 +127,97 @@ h1 {
   top: 50%;
   left: 50%;
   transform: translate(-50%, -50%);
-  width: 120px;
-  height: 120px;
-  background-color: #003478;
+  width: 140px;
+  height: 140px;
+  padding: 24px;
+  text-align: center;
+  background: radial-gradient(circle at 30% 30%, #1f4a9e, #0b1f55 70%);
   color: white;
-  border-radius: 50%;
+  border-radius: 40px;
   display: flex;
   align-items: center;
   justify-content: center;
   z-index: 2;
-  font-weight: bold;
-  box-shadow: 0 4px 10px rgba(0,0,0,0.2);
-  font-size: 16px;
+  font-weight: 700;
+  box-shadow:
+    0 25px 60px rgba(15, 39, 102, 0.35),
+    inset 0 0 0 3px rgba(255, 255, 255, 0.1);
+  font-size: 18px;
+  letter-spacing: 0.05em;
 }
 
 .subject-node {
   position: absolute;
-  width: 90px;
-  height: 90px;
-  background-color: #003478;
+  width: 96px;
+  height: 96px;
+  background: linear-gradient(145deg, #0b3a8f, #0a2c6a);
   color: white;
   border-radius: 50%;
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 14px;
+  font-size: 15px;
   cursor: pointer;
   z-index: 2;
-  box-shadow: 0 4px 8px rgba(0,0,0,0.2);
-  transition: transform 0.2s;
+  box-shadow:
+    0 12px 30px rgba(9, 33, 84, 0.35),
+    inset 0 0 0 2px rgba(255, 255, 255, 0.12);
+  transition: transform 0.3s, box-shadow 0.3s;
+}
+
+.subject-node::after {
+  content: "";
+  position: absolute;
+  inset: -6px;
+  border-radius: 50%;
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  opacity: 0.4;
+  transition: opacity 0.3s;
 }
 
 .subject-node:hover {
-  transform: scale(1.05);
+  transform: translateY(-4px) scale(1.05);
+  box-shadow:
+    0 20px 40px rgba(5, 19, 52, 0.4),
+    0 0 25px rgba(16, 71, 168, 0.45);
+}
+
+.subject-node:hover::after {
+  opacity: 0.9;
+}
+
+@media (max-width: 1200px) {
+  .mindmap-container {
+    transform: scale(0.9);
+  }
+}
+
+@media (max-width: 1024px) {
+  .mindmap-container {
+    transform: scale(0.8);
+  }
+}
+
+@media (max-width: 900px) {
+  .mindmap-card {
+    padding: 24px;
+  }
+  .mindmap-container {
+    transform: scale(0.7);
+  }
+}
+
+@media (max-width: 720px) {
+  .admin-shell {
+    padding: 32px 18px 48px;
+  }
+  .mindmap-card__head {
+    flex-direction: column;
+  }
+  .legend-pill {
+    align-self: flex-start;
+  }
+  .mindmap-container {
+    transform: scale(0.55);
+  }
 }

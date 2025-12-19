@@ -155,6 +155,12 @@ function buildInputString({ systemPrompt, fewShots, userMessage }) {
   return s;
 }
 
+// ===== 추론 모델 판별: o로 시작하는 모델(o1, o3 등)을 추론 모델로 간주 =====
+function isReasoningModelId(modelId) {
+  const m = (modelId || "").toLowerCase();
+  return m.startsWith("o"); // 예: "o3", "o1-mini" 등
+}
+
 // Chat
 async function askWithFileSearch({
   model = "gpt-4o-mini",
@@ -178,9 +184,22 @@ async function askWithFileSearch({
 
   const tools = vsId ? [{ type: "file_search", vector_store_ids: [vsId] }] : undefined;
 
+  const reasoning = isReasoningModelId(model);
+
+  const body = {
+    model,
+    input,
+    ...(tools ? { tools } : {})
+  };
+
+  // ✅ 비추론 모델일 때만 temperature 사용
+  if (!reasoning) {
+    body.temperature = temperature;
+  }
+
   const resp = await openaiFetch("/responses", {
     method: "POST",
-    body: { model, input, ...(tools ? { tools } : {}), temperature }
+    body
   });
   return extractAssistantText(resp) || "[빈 응답]";
 }

@@ -83,9 +83,19 @@ async function isApprovedTeacher() {
     }
 
     // 4) 승인 통과 시에만 버튼 이벤트 바인딩
+    const logoutBtn = document.getElementById("logoutBtn");
     const createBtn = document.getElementById("createChatbotBtn");
     const listBtn = document.getElementById("viewListBtn");
 
+    if (logoutBtn) {
+      logoutBtn.addEventListener("click", async () => {
+        try { await signOut(auth); } catch (e) {
+          console.error("[AfterLogIn] logout error:", e);
+        } finally {
+          window.location.href = "index.html";
+        }
+      });
+    }
     if (createBtn) {
       createBtn.addEventListener("click", () => {
         window.location.href = "CreateChatbot.html";

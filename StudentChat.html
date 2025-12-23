@@ -16,7 +16,6 @@
     <header class="topbar">
       <div class="topbar-inner">
         <a href="StudentLogin.html" class="icon-btn home" title="처음으로" aria-label="처음으로">
-          <!-- ✅ SVG는 CSS에서 크기 고정(찌그러짐 방지), preserveAspectRatio 명시 -->
           <svg class="home-icon" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" focusable="false" preserveAspectRatio="xMidYMid meet">
             <path d="M12 3l9 8h-3v10h-5V14H11v7H6V11H3l9-8z"></path>
           </svg>
@@ -26,6 +25,8 @@
           <h1 id="botTitle">학생용 챗봇</h1>
           <div class="subtitle">
             <span id="subjectLabel"></span>
+            <!-- ✅ 스레드 제목 표시(구분용) -->
+            <span id="threadTitleLabel" class="thread-title" aria-live="polite"></span>
           </div>
         </div>
 
@@ -69,7 +70,7 @@
           </button>
         </div>
 
-        <div class="foot-hint">파일(PDF/이미지/텍스트)을 📎로 첨부할 수 있어요.</div>
+        <div class="foot-hint 설명">파일(PDF/이미지/텍스트)을 📎로 첨부할 수 있어요.</div>
       </form>
     </div>
   </div>

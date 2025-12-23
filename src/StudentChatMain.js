@@ -1,10 +1,13 @@
 // [src/StudentChatMain.js] — 첨부 썸네일/라이트박스 + Markdown/수식 렌더링 + Firestore 롱폴링 안정화
+// ✅ FIX 1) ?new=true는 "처음 1회만" 소비하고 URL에서 제거 → 턴마다 부모문서 생성 방지
+// ✅ FIX 2) OpenAI thread를 conversationId(스레드) 단위로 분리 → 스레드 간 맥락 영향 차단
+// ✅ FIX 3) 스레드 제목(기본/자동 갱신) 지원 (Firestore 저장은 best-effort + localStorage fallback)
 
 import { initializeApp, getApps } from "firebase/app";
 import {
   initializeFirestore, doc, getDoc,
   collection, addDoc, setDoc, serverTimestamp,
-  getDocs, query, where, orderBy
+  getDocs, query, where, orderBy, increment
 } from "firebase/firestore";
 import {
   getAuth,
@@ -40,6 +43,7 @@ const authDefault = getAuth(defaultApp);
 /* ===== DOM ===== */
 const botTitle = document.getElementById("botTitle");
 const subjectLabel = document.getElementById("subjectLabel");
+const threadTitleLabel = document.getElementById("threadTitleLabel");
 const chatWindow = document.getElementById("chatWindow");
 const composer = document.getElementById("composer");
 const userMessageEl = document.getElementById("userMessage");
@@ -149,15 +153,15 @@ function qsParam(name) {
   return u.searchParams.get(name);
 }
 
-// ✅ StudentLogin → StudentChat 재접속 시 전달되는 convId
-const convIdFromUrl = qsParam("convId");
-// ✅ 새 대화 시작 플래그 (+ 버튼 클릭 시)
-const isNewConversation = qsParam("new") === "true";
+// ✅ URL 파라미터는 "상태"이므로 let으로 들고 가면서 중간에 갱신합니다.
+let convIdFromUrl = qsParam("convId");
+let isNewConversation = qsParam("new") === "true";
 
 function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
 function escapeHtml(str = "") {
   return String(str).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
 }
+
 function addMsgEl(role, html, {asHtml=false} = {}) {
   const wrap = document.createElement("div");
   wrap.className = `msg ${role}`;
@@ -215,25 +219,52 @@ function setSending(on) {
   attachBtn.disabled = on;
 }
 
-/* ===== Student ID (닉네임 대신 사용) ===== */
+/* ===== Student ID ===== */
 const LAST_STUDENT_ID_KEY = "last_student_id";
 function getCurrentStudentId() {
   return localStorage.getItem(LAST_STUDENT_ID_KEY) || "손님";
 }
 
-/* ===== Thread/Conversation ===== */
-function threadKey(aid, studentId) { return `thread:${aid}:${studentId || "guest"}`; }
-async function getOrCreateThread(aid, studentId) {
-  const key = threadKey(aid, studentId);
-  let tid = localStorage.getItem(key);
-  if (tid) return tid;
-  const t = await createThread();
-  tid = t.id;
-  localStorage.setItem(key, tid);
-  return tid;
-}
-function resetThread(aid, studentId) { localStorage.removeItem(threadKey(aid, studentId)); }
+/* ===== Thread/Conversation (FIX) ===== */
+// ✅ 마지막으로 열었던 convId만 기억(스레드 목록은 StudentLogin에서 관리)
 function convKey(aid, studentId) { return `conv:${aid}:${studentId || "guest"}`; }
+// ✅ OpenAI thread는 "conversationId 단위"로 분리
+function convThreadKey(cid) { return `thread:${cid}`; }
+// ✅ 스레드 제목 localStorage fallback
+function convTitleKey(cid) { return `convTitle:${cid}`; }
+
+function makeDefaultTitle() {
+  const d = new Date();
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  const hh = String(d.getHours()).padStart(2, "0");
+  const mm = String(d.getMinutes()).padStart(2, "0");
+  return `새 대화 · ${y}.${m}.${day} ${hh}:${mm}`;
+}
+
+function setThreadTitleUI(title) {
+  const t = (title || "").trim();
+  if (threadTitleLabel) threadTitleLabel.textContent = t ? t : "";
+  currentConvTitle = t;
+}
+
+function shortenTitleFromText(text) {
+  const t = String(text || "").trim().replace(/\s+/g, " ");
+  if (!t) return "";
+  return t.length > 22 ? t.slice(0, 22) + "…" : t;
+}
+
+function replaceUrlAfterNewConversation(cid) {
+  const u = new URL(window.location.href);
+  u.searchParams.set("convId", cid);
+  u.searchParams.delete("new");        // ✅ new 제거
+  history.replaceState({}, "", u.toString());
+
+  // ✅ 런타임 상태도 갱신(중요!)
+  convIdFromUrl = cid;
+  isNewConversation = false;
+}
 
 let assistantId = null;
 let chatbotDocId = null;
@@ -241,10 +272,15 @@ let teacherUid = null;
 let subjectStr = "";
 let modelStr = "";
 let conversationId = null;
+
 let hint1 = "";
 let hint2 = "";
 let hint3 = "";
 let problemText = "";
+
+// 현재 스레드의 제목/ThreadId 캐시
+let currentConvTitle = "";
+let currentOpenAIThreadId = null;
 
 /* ===== Auth ===== */
 function waitForAuthUser(auth, timeoutMs = 8000) {
@@ -281,7 +317,6 @@ async function ensureAuth() {
 
 /* ===== 🔎 역추적 보강: code/assistant/id → teacherUid/chatbotDocId 채우기 ===== */
 async function hydrateFromCodeOrAssistant() {
-  // 1) ?code=###### 로 들어온 경우
   const codeParam = qsParam("code");
   if (codeParam) {
     try {
@@ -302,7 +337,6 @@ async function hydrateFromCodeOrAssistant() {
     }
   }
 
-  // 2) assistantId만 있는 경우: chatbots에서 소유자 역추적
   if (!teacherUid && assistantId) {
     try {
       const qy = query(collection(dbPrimary, "chatbots"), where("assistantId", "==", assistantId));
@@ -317,7 +351,6 @@ async function hydrateFromCodeOrAssistant() {
     }
   }
 
-  // 3) chatbotDocId만 있는 경우
   if (!teacherUid && chatbotDocId) {
     try {
       const s = await getDoc(doc(dbPrimary, "chatbots", chatbotDocId));
@@ -331,7 +364,7 @@ async function hydrateFromCodeOrAssistant() {
   }
 }
 
-/* ===== 부모 대화 문서 보장 ===== */
+/* ===== 부모 대화 문서 보장 (FIX) ===== */
 async function ensureConversation() {
   const u = await ensureAuth();
   if (!u) return null;
@@ -339,15 +372,28 @@ async function ensureConversation() {
   const studentId = getCurrentStudentId();
   const key = convKey(assistantId, studentId);
 
-  // 공통: 기존 문서 확인 + updatedAt 갱신 + localStorage 동기화
   const tryUseExisting = async (cid) => {
     if (!cid) return null;
     try {
       const ref = doc(db, CONV_COL, cid);
       const snap = await getDoc(ref);
       if (snap.exists()) {
+        // updatedAt만은 항상 merge 시도
         try { await setDoc(ref, { updatedAt: serverTimestamp() }, { merge: true }); } catch {}
+
         conversationId = cid;
+
+        // 제목 UI(있으면) 반영 + localStorage fallback
+        const data = snap.data() || {};
+        const titleFromDoc = (data.title || "").trim();
+        const titleFromLS = localStorage.getItem(convTitleKey(cid)) || "";
+        const title = titleFromDoc || titleFromLS || "";
+        if (titleFromDoc) {
+          try { localStorage.setItem(convTitleKey(cid), titleFromDoc); } catch {}
+        }
+        if (title) setThreadTitleUI(title);
+
+        // 마지막 convId 갱신
         try { localStorage.setItem(key, cid); } catch {}
         return cid;
       }
@@ -355,31 +401,29 @@ async function ensureConversation() {
     return null;
   };
 
-  // ✅ 새 대화 시작 플래그가 있으면 localStorage 무시하고 바로 새 대화 생성
-  if (isNewConversation) {
-    // 기존 localStorage 키 삭제 (새 대화 시작)
-    try { localStorage.removeItem(key); } catch {}
-    // conversationId 변수도 명시적으로 초기화
-    conversationId = null;
-    // 기존 conversation 재사용하지 않고 바로 새로 생성하도록 넘어감
-  } else {
-    // 1) URL에서 온 convId 우선 사용 (StudentLogin에서 날짜 클릭한 경우)
+  // ✅ 새 대화는 "처음 1회만" 새로 만들고, 즉시 URL에서 new 제거해야 합니다.
+  if (!isNewConversation) {
+    // 1) URL convId 우선
     if (convIdFromUrl) {
       const ok = await tryUseExisting(convIdFromUrl);
       if (ok) return ok;
     }
-
-    // 2) 로컬스토리지에 저장된 convId 사용
+    // 2) 마지막 convId
     let savedConvId = localStorage.getItem(key);
     if (savedConvId) {
       const ok = await tryUseExisting(savedConvId);
       if (ok) return ok;
       try { localStorage.removeItem(key); } catch {}
-      savedConvId = null;
     }
+  } else {
+    // 새 대화 시작이면 이전 convId 강제 무시
+    try { localStorage.removeItem(key); } catch {}
+    conversationId = null;
+    currentOpenAIThreadId = null; // ✅ 새 스레드이므로 thread도 새로
+    // 여기서 return 하지 않고 아래에서 새 문서 생성
   }
 
-  // 규칙 통과용 payload (모든 필드 string 타입 보장, createdBy는 빈 문자열이라도 null 금지)
+  // 규칙 통과용 payload (기존 필드 유지)
   const buildPayload = () => ({
     assistantId: String(assistantId || ""),
     subject: String(subjectStr || ""),
@@ -392,45 +436,100 @@ async function ensureConversation() {
     updatedAt: serverTimestamp(),
   });
 
-  // teacherUid가 비어 있으면 저장 직전에 보강
   if (!teacherUid) { await hydrateFromCodeOrAssistant(); }
 
   // 3) 새 부모 문서 생성
   const refNew = await addDoc(collection(db, CONV_COL), buildPayload());
   const newId = refNew.id;
-  try { localStorage.setItem(key, newId); } catch {}
   conversationId = newId;
+
+  // 마지막 convId 저장
+  try { localStorage.setItem(key, newId); } catch {}
+
+  // ✅ FIX: new=true는 "소비"하고 URL을 convId로 교체 (이후 턴에서 재생성 방지)
+  if (isNewConversation) {
+    replaceUrlAfterNewConversation(newId);
+  }
+
+  // ✅ 스레드 제목(기본) 설정: Firestore 저장은 best-effort + localStorage fallback
+  const defaultTitle = makeDefaultTitle();
+  setThreadTitleUI(defaultTitle);
+  try { localStorage.setItem(convTitleKey(newId), defaultTitle); } catch {}
+  try { await setDoc(doc(db, CONV_COL, newId), { title: defaultTitle }, { merge: true }); } catch {}
+
   return newId;
 }
 
+/* ===== OpenAI Thread: conversationId 단위로 분리 (FIX) ===== */
+async function getOrCreateThreadForConversation() {
+  await ensureConversation();
+  if (!conversationId) throw new Error("conversationId가 없습니다.");
+
+  if (currentOpenAIThreadId) return currentOpenAIThreadId;
+
+  const cid = conversationId;
+  let tid = null;
+
+  // 1) Firestore(가능하면)에서 읽기
+  try {
+    const snap = await getDoc(doc(db, CONV_COL, cid));
+    if (snap.exists()) {
+      const d = snap.data() || {};
+      tid = d.openaiThreadId || d.threadId || null;
+    }
+  } catch {}
+
+  // 2) localStorage fallback
+  if (!tid) {
+    tid = localStorage.getItem(convThreadKey(cid)) || null;
+  }
+
+  // 3) 없으면 새로 생성 + 저장(best-effort)
+  if (!tid) {
+    const t = await createThread();
+    tid = t.id;
+    try { localStorage.setItem(convThreadKey(cid), tid); } catch {}
+    try { await setDoc(doc(db, CONV_COL, cid), { openaiThreadId: tid }, { merge: true }); } catch {}
+  }
+
+  currentOpenAIThreadId = tid;
+  return tid;
+}
+
+/* ===== 메시지 저장 ===== */
 async function logMessage(role, content) {
   await ensureAuth();
   if (!conversationId) await ensureConversation();
+
   try {
     await addDoc(collection(db, `${CONV_COL}/${conversationId}/${MSGS_SUB}`), {
       role, content, createdAt: serverTimestamp()
     });
-    await setDoc(doc(db, CONV_COL, conversationId), { updatedAt: serverTimestamp() }, { merge: true });
+
+    // updatedAt은 반드시 유지, 추가 필드는 규칙에 막힐 수 있으니 best-effort로 처리
+    try {
+      await setDoc(doc(db, CONV_COL, conversationId), {
+        updatedAt: serverTimestamp(),
+        lastRole: role,
+        lastMessage: String(content || "").slice(0, 200),
+        messageCount: increment(1),
+      }, { merge: true });
+    } catch {
+      await setDoc(doc(db, CONV_COL, conversationId), { updatedAt: serverTimestamp() }, { merge: true });
+    }
   } catch (e) {
     console.warn("logMessage failed:", e?.message || e);
   }
 }
 
-/* ✅ 기존 대화 로그 복원 */
+/* ===== ✅ 기존 대화 로그 복원 ===== */
 async function loadExistingMessages() {
   await ensureAuth();
 
-  // ✅ 새 대화 시작 플래그가 있으면 기존 메시지 로드하지 않음
-  // (이 함수는 초기화 단계에서 isNewConversation 체크 후 호출되지 않지만, 안전을 위해 체크)
-  if (isNewConversation) {
-    return false;
-  }
+  if (isNewConversation) return false;
 
-  // URL convId > 이미 지정된 conversationId > ensureConversation() 순서로 시도
   let cid = convIdFromUrl || conversationId;
-  if (!cid) {
-    cid = await ensureConversation();
-  }
+  if (!cid) cid = await ensureConversation();
   if (!cid) return false;
 
   try {
@@ -450,7 +549,6 @@ async function loadExistingMessages() {
       if (!content) return;
 
       if (role === "assistant") {
-        // 과거 assistant 메시지는 타자 효과 없이 바로 Markdown 렌더링
         const cleaned = cleanCitations(content);
         const bubble = addMsgEl("assistant", "", { asHtml: true });
         const html = `<div class="md">${mdToHtml(cleaned)}</div>`;
@@ -500,12 +598,10 @@ async function loadChatbotMeta() {
         if (!qModel && data.assistantModelSnapshot) modelStr = data.assistantModelSnapshot;
         if (!teacherUid && (data.ownerUid || data.uid)) teacherUid = data.ownerUid || data.uid;
 
-        // 힌트 필드 로드
         hint1 = data.hint1 || "";
         hint2 = data.hint2 || "";
         hint3 = data.hint3 || "";
 
-        // 문제 필드 로드 (Problem) — 읽기 전용 표시용
         problemText = (data.Problem || "").trim();
         if (problemText && problemBadge) {
           problemBadge.innerHTML = "";
@@ -535,14 +631,12 @@ async function loadChatbotMeta() {
     }
   }
 
-  // ✅ 어떤 경로로 들어와도 teacherUid 최대한 채우기
   await hydrateFromCodeOrAssistant();
 
   if (!assistantId) {
     throw new Error("assistantId가 없습니다. URL에 ?assistant=asst_xxx 또는 ?code=###### 또는 ?id=<문서ID> 중 하나가 필요합니다.");
   }
 
-  // 수학 과목인 경우에만 힌트 버튼 표시
   try {
     const subj = (subjectStr || "").trim();
     const hasAnyHint = !!(hint1 || hint2 || hint3);
@@ -629,20 +723,17 @@ function createObjectLink(file) {
   return { url, revoke: () => URL.revokeObjectURL(url) };
 }
 function renderUserWithAttachments(text, files=[]) {
-  // 버블
   const wrap = document.createElement("div");
   wrap.className = "msg user";
   const bubble = document.createElement("div");
   bubble.className = "bubble";
 
-  // 텍스트
   if (text && text.trim()) {
     const p = document.createElement("div");
     p.textContent = text;
     bubble.appendChild(p);
   }
 
-  // 첨부 그리드
   if (files.length) {
     const grid = document.createElement("div");
     grid.className = "attachments";
@@ -710,7 +801,6 @@ document.addEventListener("keydown", (e) => { if (e.key === "Escape" && lightbox
 
 /* ===== Markdown/수식 렌더링 ===== */
 function cleanCitations(raw="") {
-  //  같은 특수 각주 제거
   return raw
     .replace(/【[^】]*?†[^】]*】/g, "")
     .replace(/【[^】]*?source[^】]*】/gi, "");
@@ -728,22 +818,38 @@ async function renderAssistantMarkdownSmart(text) {
   try { await window.MathJax?.typesetPromise?.([bubble]); } catch {}
 }
 
-/* ===== 채팅 플로우 ===== */
-async function sendMessageFlow(text) {
-  const studentId = getCurrentStudentId();
-  const threadId = await getOrCreateThread(assistantId, studentId);
+/* ===== 채팅 플로우 (FIX) ===== */
+async function maybeUpdateTitleFromFirstUserMessage(text) {
+  const newTitle = shortenTitleFromText(text);
+  if (!newTitle) return;
 
+  // 이미 “새 대화 …”가 아닌 제목이면 변경하지 않음
+  if (currentConvTitle && !currentConvTitle.startsWith("새 대화")) return;
+
+  setThreadTitleUI(newTitle);
+  try { localStorage.setItem(convTitleKey(conversationId), newTitle); } catch {}
+  try { await setDoc(doc(db, CONV_COL, conversationId), { title: newTitle }, { merge: true }); } catch {}
+}
+
+async function sendMessageFlow(text) {
+  // ✅ OpenAI thread는 "현재 conversationId" 기준으로 분리
+  const threadId = await getOrCreateThreadForConversation();
   await ensureConversation();
 
   // 사용자 메시지 + 첨부 표시
   const filesSnapshot = pendingFiles.slice();
+
   let userShown = text;
   if (filesSnapshot.length > 0) {
     const names = filesSnapshot.map(f => f.name).join(", ");
     userShown = text ? `${text}\n\n(첨부: ${names})` : `(첨부: ${names})`;
   }
+
   await logMessage("user", userShown);
   renderUserWithAttachments(text, filesSnapshot);
+
+  // ✅ 첫 사용자 발화면 제목 자동 갱신
+  await maybeUpdateTitleFromFirstUserMessage(text);
 
   // 업로드 후 전송
   const uploaded = filesSnapshot.length ? await uploadFilesForAssistants(filesSnapshot) : [];
@@ -810,10 +916,8 @@ async function handleHintClick(hintKey) {
   if (!content) return;
 
   try {
-    // 힌트를 assistant 메시지로 표시
     await renderAssistantMarkdownSmart(content);
     await logMessage("assistant", cleanCitations(content));
-    // 힌트 클릭 로그 저장
     await logHintClick(hintKey, content);
   } catch (e) {
     console.error("handleHintClick:", e?.message || e);
@@ -848,7 +952,7 @@ async function isTeacherAuthorized(user) {
   if (emailNorm && WL.includes(emailNorm)) return true;
   try {
     const token = await user.getIdTokenResult();
-    if (token?.claims?.teacher === true || token?.claims?.admin === true) return true; // ✅ admin 경로 수정
+    if (token?.claims?.teacher === true || token?.claims?.admin === true) return true;
     if (user.uid && user.uid === (teacherUid || "")) return true;
 
     try {
@@ -962,28 +1066,19 @@ onAuthStateChanged(authDefault, async (user) => {
 
     await loadChatbotMeta();
 
-    // ✅ 새 대화 시작 시 완전 초기화
+    // ✅ 새 대화 시작이면: 채팅창 비우고 "한 번만" 새 conversation 만들고 URL 정리
     if (isNewConversation) {
-      // 1) 기존 Thread 리셋 (이전 대화 맥락 제거)
-      if (assistantId) {
-        const studentId = getCurrentStudentId();
-        resetThread(assistantId, studentId);
-      }
-      
-      // 2) conversationId 변수 초기화
-      conversationId = null;
-      
-      // 3) 채팅창 완전히 비우기
-      if (chatWindow) {
-        chatWindow.innerHTML = "";
-      }
-      
-      // 4) 새 conversation 생성 (메시지는 로드하지 않음)
-      await ensureConversation();
+      if (chatWindow) chatWindow.innerHTML = "";
+      await ensureConversation(); // 여기서 replaceUrlAfterNewConversation() 수행됨
+      // 새 대화는 기존 메시지 로드하지 않음
     } else {
-      // ✅ 기존 Firestore 로그가 있으면 우선 복원
-      // (이제는 첫 인사는 시스템 프롬프트/모델에 맡기고, UI에서 강제로 출력하지 않음)
       await loadExistingMessages();
+    }
+
+    // URL/문서에서 제목이 있으면 표시(ensureConversation 내부에서 반영됨)
+    if (conversationId && !currentConvTitle) {
+      const t = localStorage.getItem(convTitleKey(conversationId)) || "";
+      if (t) setThreadTitleUI(t);
     }
   } catch (err) {
     console.error(err);

@@ -12,15 +12,15 @@ body{margin:0;font-family:"Noto Sans KR",system-ui,-apple-system,Segoe UI,Roboto
 
 /* Topbar */
 .topbar{position:sticky;top:0;background:linear-gradient(180deg,#ffffffee 0%,#ffffffd0 100%);backdrop-filter:blur(8px);border-bottom:1px solid var(--border);z-index:20}
-.topbar-inner{max-width:860px;margin:0 auto;padding:10px 16px;display:flex;align-items:center;gap:10px}
-.title-block{flex:1;min-width:0}
+.topbar-inner{max-width:1200px;margin:0 auto;padding:10px 16px;display:flex;align-items:center;gap:14px}
+.title-block{flex:0 0 auto;min-width:0}
 .title-block h1{font-size:16px;margin:0 0 2px 0;font-weight:700}
 .subtitle{display:flex;gap:8px;align-items:center;color:var(--muted);font-size:12px}
-.right-actions{display:flex;gap:6px}
+.right-actions{display:flex;gap:6px;flex:0 0 auto}
 .icon-btn{display:inline-flex;align-items:center;justify-content:center;width:36px;height:36px;border-radius:10px;border:1px solid var(--border);background:#fff;color:#374151;cursor:pointer}
 .icon-btn:hover{background:#f3f4f6}
 .icon-btn.ghost{background:transparent}
-.icon-btn.home{width:34px;height:34px}
+.icon-btn.home{width:36px;height:36px}
 .icon-btn.primary{background:var(--accent);color:#fff;border-color:transparent}
 .icon-btn.primary:hover{filter:brightness(.95)}
 .icon-btn.attach{background:#fff;border-color:var(--ring);font-size:18px}
@@ -31,13 +31,44 @@ body{margin:0;font-family:"Noto Sans KR",system-ui,-apple-system,Segoe UI,Roboto
 .hint-buttons{display:flex;gap:6px;margin-right:4px}
 .hint-btn{background:#fff;border-color:#d1d5db;color:#111827;font-size:12px;padding:6px 10px}
 .hint-btn:hover{background:#f3f4f6}
+.problem-badge{
+  flex:1 1 auto;
+  min-height:42px;
+  max-width:100%;
+  margin:0 12px;
+  padding:12px 16px;
+  border-radius:14px;
+  background:linear-gradient(135deg,#f4f8ff 0%,#f1f5ff 50%,#e8f5f3 100%);
+  border:1px solid #dfe7fb;
+  color:#0f172a;
+  font-size:13px;
+  line-height:1.6;
+  box-shadow:0 4px 12px rgba(15,23,42,0.08);
+  white-space:normal;
+  overflow:visible;
+  text-overflow:clip;
+  word-break:keep-all;
+  text-align:left;
+  display:flex;
+  align-items:flex-start;
+  justify-content:flex-start;
+  gap:6px;
+  flex-wrap:wrap;
+}
+.problem-sub{
+  display:block;
+  margin-top:4px;
+  color:#4b5563;
+  font-size:12px;
+  line-height:1.5;
+}
 .code-panel{max-width:860px;margin:8px auto 10px;padding:10px 12px;border:1px dashed #b7e7d5;border-radius:12px;display:flex;gap:8px;align-items:center;background:#f9fffc}
 .code-text{flex:1;padding:8px 10px;border-radius:10px;border:1px solid var(--border);background:#fff;font-weight:700;letter-spacing:2px}
 .code-panel .hint{font-size:12px;color:var(--muted)}
 
 /* Chat */
 .chat{flex:1 1 auto}
-.chat-window{max-width:860px;margin:16px auto 140px;padding:0 16px}
+.chat-window{max-width:1200px;margin:16px auto 140px;padding:0 16px}
 .msg{display:flex;gap:12px;margin:14px 0}
 .msg .bubble{max-width:78%;padding:12px 14px;border-radius:14px;line-height:1.6;white-space:pre-wrap;word-break:break-word}
 .msg.assistant{justify-content:flex-start}

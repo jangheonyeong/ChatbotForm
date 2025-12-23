@@ -44,7 +44,6 @@ const chatWindow = document.getElementById("chatWindow");
 const composer = document.getElementById("composer");
 const userMessageEl = document.getElementById("userMessage");
 const sendBtn = document.getElementById("sendBtn");
-const resetThreadBtn = document.getElementById("resetThreadBtn");
 
 // 교사 전용 UI + 힌트 버튼
 const issueCodeBtn = document.getElementById("issueCodeBtn");
@@ -55,6 +54,7 @@ const hintButtonsWrap = document.getElementById("hintButtons");
 const hintBtn1 = document.getElementById("hintBtn1");
 const hintBtn2 = document.getElementById("hintBtn2");
 const hintBtn3 = document.getElementById("hintBtn3");
+const problemBadge = document.getElementById("problemBadge");
 
 // 첨부 DOM
 const attachBtn = document.getElementById("attachBtn");
@@ -244,6 +244,7 @@ let conversationId = null;
 let hint1 = "";
 let hint2 = "";
 let hint3 = "";
+let problemText = "";
 
 /* ===== Auth ===== */
 function waitForAuthUser(auth, timeoutMs = 8000) {
@@ -503,6 +504,22 @@ async function loadChatbotMeta() {
         hint1 = data.hint1 || "";
         hint2 = data.hint2 || "";
         hint3 = data.hint3 || "";
+
+        // 문제 필드 로드 (Problem) — 읽기 전용 표시용
+        problemText = (data.Problem || "").trim();
+        if (problemText && problemBadge) {
+          problemBadge.innerHTML = "";
+          const main = document.createElement("div");
+          main.textContent = problemText;
+          const sub = document.createElement("div");
+          sub.className = "problem-sub";
+          sub.textContent = "문제를 풀 자신감을 입력해주세요.";
+          problemBadge.appendChild(main);
+          problemBadge.appendChild(sub);
+          problemBadge.hidden = false;
+        } else if (problemBadge) {
+          problemBadge.hidden = true;
+        }
       }
     } catch (err) {
       console.warn("Firestore 읽기 실패(무시 가능):", err?.message || err);
@@ -994,13 +1011,6 @@ userMessageEl?.addEventListener("keydown", (e) => {
     e.preventDefault();
     composer?.requestSubmit();
   }
-});
-
-/* 리셋 */
-resetThreadBtn?.addEventListener("click", () => {
-  const studentId = getCurrentStudentId();
-  resetThread(assistantId, studentId);
-  renderBubble("assistant", "대화를 새로 시작합니다. (이전 맥락은 초기화됨)");
 });
 
 /* 버튼 바인딩 */

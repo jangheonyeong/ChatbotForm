@@ -17,13 +17,48 @@ body{margin:0;font-family:"Noto Sans KR",system-ui,-apple-system,Segoe UI,Roboto
 .title-block h1{font-size:16px;margin:0 0 2px 0;font-weight:700}
 .subtitle{display:flex;gap:8px;align-items:center;color:var(--muted);font-size:12px}
 .right-actions{display:flex;gap:6px;flex:0 0 auto}
-.icon-btn{display:inline-flex;align-items:center;justify-content:center;width:36px;height:36px;border-radius:10px;border:1px solid var(--border);background:#fff;color:#374151;cursor:pointer}
+
+/* ✅ 버튼이 flex에서 가로로 “압축(shrink)”되지 않게 고정 */
+.icon-btn{
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  width:36px;
+  height:36px;
+  border-radius:10px;
+  border:1px solid var(--border);
+  background:#fff;
+  color:#374151;
+  cursor:pointer;
+
+  /* 핵심: flex 컨테이너에서 버튼이 눌려서 납작해지는 것 방지 */
+  flex:0 0 auto;       /* = flex-grow:0; flex-shrink:0; flex-basis:auto */
+  line-height:0;       /* inline/svg baseline 영향 최소화 */
+  text-decoration:none; /* a 태그일 때 밑줄 방지 */
+}
+
 .icon-btn:hover{background:#f3f4f6}
 .icon-btn.ghost{background:transparent}
-.icon-btn.home{width:36px;height:36px}
+
+/* ✅ SVG는 크기를 CSS로 고정 + block 렌더링 */
+.icon-btn svg{
+  width:18px;
+  height:18px;
+  display:block;
+  flex:0 0 auto;
+}
+
+.icon-btn.home{
+  width:36px;
+  height:36px;
+  /* 원형 느낌을 원하시면 999px 유지(선택) */
+  /* border-radius:999px; */
+}
+
 .icon-btn.primary{background:var(--accent);color:#fff;border-color:transparent}
 .icon-btn.primary:hover{filter:brightness(.95)}
 .icon-btn.attach{background:#fff;border-color:var(--ring);font-size:18px}
+
 .pill-btn{border:1px solid var(--border);background:#fff;color:#111827;padding:8px 12px;border-radius:999px;font-size:13px;cursor:pointer}
 .pill-btn.small{padding:6px 10px;font-size:12px}
 .pill-btn.success{background:var(--accent);color:#fff;border:none}
@@ -31,6 +66,7 @@ body{margin:0;font-family:"Noto Sans KR",system-ui,-apple-system,Segoe UI,Roboto
 .hint-buttons{display:flex;gap:6px;margin-right:4px}
 .hint-btn{background:#fff;border-color:#d1d5db;color:#111827;font-size:12px;padding:6px 10px}
 .hint-btn:hover{background:#f3f4f6}
+
 .problem-badge{
   flex:1 1 auto;
   min-height:42px;
@@ -62,6 +98,7 @@ body{margin:0;font-family:"Noto Sans KR",system-ui,-apple-system,Segoe UI,Roboto
   font-size:12px;
   line-height:1.5;
 }
+
 .code-panel{max-width:860px;margin:8px auto 10px;padding:10px 12px;border:1px dashed #b7e7d5;border-radius:12px;display:flex;gap:8px;align-items:center;background:#f9fffc}
 .code-text{flex:1;padding:8px 10px;border-radius:10px;border:1px solid var(--border);background:#fff;font-weight:700;letter-spacing:2px}
 .code-panel .hint{font-size:12px;color:var(--muted)}

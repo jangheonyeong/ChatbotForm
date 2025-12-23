@@ -16,7 +16,8 @@
     <header class="topbar">
       <div class="topbar-inner">
         <a href="StudentLogin.html" class="icon-btn home" title="처음으로" aria-label="처음으로">
-          <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor" aria-hidden="true">
+          <!-- ✅ SVG는 CSS에서 크기 고정(찌그러짐 방지), preserveAspectRatio 명시 -->
+          <svg class="home-icon" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" focusable="false" preserveAspectRatio="xMidYMid meet">
             <path d="M12 3l9 8h-3v10h-5V14H11v7H6V11H3l9-8z"></path>
           </svg>
         </a>

@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────
-// Firebase + OpenAI Responses + File Search (Vector Store)
+// Firebase + Firebase Functions(Preview/RAG) + Firestore/Storage
 // 저장 버튼 → Firestore 저장/수정
 // + 저장된 PDF/미저장(선택만 한) PDF 모두 목록 노출 & 개별 삭제
 // + 미저장 PDF도 클릭(Blob URL)으로 미리보기
@@ -14,6 +14,7 @@ import {
 import {
   getStorage, ref as storageRef, uploadBytes, getDownloadURL, deleteObject
 } from "firebase/storage";
+import { getFunctions, httpsCallable } from "firebase/functions";
 import { firebaseConfig } from "../firebaseConfig.js";
 
 // ===== marked 전역 옵션: 줄바꿈/표/리스트 등 GFM 스타일 활성화 =====
@@ -31,15 +32,17 @@ const appFB = initializeApp(firebaseConfig);
 const auth = getAuth(appFB);
 const db = getFirestore(appFB);
 const storage = getStorage(appFB);
+const functions = getFunctions(appFB, "asia-northeast3");
+
+const prepareRagPreviewCall = httpsCallable(functions, "prepareRagPreview");
+const previewChatCall = httpsCallable(functions, "previewChat");
+
 let currentUser = null;
 onAuthStateChanged(auth, (u) => { currentUser = u || null; });
 
-// ===== OpenAI =====
-const OPENAI_API_KEY = import.meta.env.VITE_OPENAI_API_KEY;
-const OPENAI_BASE = "https://api.openai.com/v1";
-
 let vectorStoreId = null;
 let isRagReady = false;
+let lastPreparedSourceKey = "";
 
 // 사용자가 방금 선택(미저장)한 파일들
 let selectedFiles = [];
@@ -49,31 +52,8 @@ let selectedFileObjectUrls = [];
 // 편집 모드에서 불러온 "저장된" 파일들 (Firestore 보관본)
 let savedRagFiles = []; // [{name,url,path}]
 
-// 업로드/재첨부 상태(중복 인덱싱 방지)
-const uploadedByFingerprint = new Map();
-const attachedFileIds = new Set();
+// 선택 파일 fingerprint
 const makeFingerprint = (file) => `${file.name}:${file.size}:${file.lastModified}`;
-
-// 공통 fetch
-async function openaiFetch(path, { method = "GET", headers = {}, body } = {}) {
-  const isForm = body instanceof FormData;
-  const res = await fetch(`${OPENAI_BASE}${path}`, {
-    method,
-    headers: {
-      Authorization: `Bearer ${OPENAI_API_KEY}`,
-      "OpenAI-Beta": "assistants=v2",
-      ...(isForm ? {} : { "Content-Type": "application/json" }),
-      ...headers
-    },
-    body: isForm ? body : body ? JSON.stringify(body) : undefined
-  });
-  if (!res.ok) {
-    let detail = "";
-    try { detail = await res.text(); } catch {}
-    throw new Error(`HTTP ${res.status} ${detail}`);
-  }
-  return res.json();
-}
 
 // 상태 뱃지
 function setRagStatus(state, text) {
@@ -83,34 +63,37 @@ function setRagStatus(state, text) {
   el.querySelector(".text").textContent = text;
 }
 
-// [RAG] Vector Store
-async function ensureVectorStore() {
-  if (vectorStoreId) return vectorStoreId;
-  const data = await openaiFetch("/vector_stores", {
-    method: "POST",
-    body: { name: `vs_${Date.now()}`, expires_after: { anchor: "last_active_at", days: 7 } }
-  });
-  vectorStoreId = data.id;
-  return vectorStoreId;
+function getCallableErrorMessage(err) {
+  return (
+    err?.details?.message ||
+    err?.details ||
+    err?.message ||
+    "알 수 없는 오류가 발생했습니다."
+  );
 }
-async function uploadFileToOpenAI(file) {
-  const form = new FormData();
-  form.append("file", file);
-  form.append("purpose", "assistants");
-  return openaiFetch("/files", { method: "POST", body: form });
+
+function invalidatePreparedRag(options = {}) {
+  const {
+    disableSend = true,
+    statusState = null,
+    statusText = null
+  } = options;
+
+  vectorStoreId = null;
+  isRagReady = false;
+  lastPreparedSourceKey = "";
+
+  const sendBtn = document.getElementById("sendMessage");
+  const ragOn = document.getElementById("ragToggle")?.checked;
+  if (disableSend && sendBtn && ragOn) sendBtn.disabled = true;
+
+  if (statusText !== null) setRagStatus(statusState, statusText);
 }
-async function attachToVS(vsId, fileId) {
-  return openaiFetch(`/vector_stores/${vsId}/files`, { method: "POST", body: { file_id: fileId } });
-}
-async function waitIndexed(vsId, fileId, { timeoutMs = 180000, intervalMs = 2000 } = {}) {
-  const start = Date.now();
-  while (true) {
-    const info = await openaiFetch(`/vector_stores/${vsId}/files/${fileId}`);
-    if (info.status === "completed") return info;
-    if (info.status === "failed") throw new Error("파일 인덱싱 실패");
-    if (Date.now() - start > timeoutMs) throw new Error("인덱싱 타임아웃");
-    await new Promise(r => setTimeout(r, intervalMs));
-  }
+
+function buildCurrentRagSourceKey() {
+  const savedKeys = (savedRagFiles || []).map((m) => `saved:${fileKey(m)}`);
+  const pickedKeys = (selectedFiles || []).map((f) => `picked:${makeFingerprint(f)}`);
+  return [...savedKeys, ...pickedKeys].filter(Boolean).sort().join("||");
 }
 
 // FEW-SHOT
@@ -133,93 +116,13 @@ function parseFewShot(raw) {
   if (parts.length >= 2) return { user: parts[0].trim(), assistant: parts.slice(1).join("\n").trim() };
   return { user: text, assistant: "" };
 }
+
 function isUsefulFewShot(ex) {
   const u = (ex?.user || "").trim();
   const a = (ex?.assistant || "").trim();
   if (!u) return false;
   if (a && a.length < 8) return false;
   return true;
-}
-function buildInputString({ systemPrompt, fewShots, userMessage }) {
-  let s = "";
-  if (systemPrompt?.trim()) s += `System:\n${systemPrompt.trim()}\n\n`;
-  if (Array.isArray(fewShots) && fewShots.length) {
-    s += "Examples:\n";
-    fewShots.forEach(({ user, assistant }) => {
-      if (user) s += `User: ${user}\n`;
-      if (assistant) s += `Assistant: ${assistant}\n`;
-      s += "\n";
-    });
-  }
-  s += `User: ${userMessage}\nAssistant:`;
-  return s;
-}
-
-// ===== 추론 모델 판별: o로 시작하는 모델(o1, o3 등)을 추론 모델로 간주 =====
-function isReasoningModelId(modelId) {
-  const m = (modelId || "").toLowerCase();
-  return m.startsWith("o"); // 예: "o3", "o1-mini" 등
-}
-
-// Chat
-async function askWithFileSearch({
-  model = "gpt-4o-mini",
-  systemPrompt,
-  fewShots = [],
-  userMessage,
-  vsId,
-  selfConsistency = false,
-  samples = 3,
-  temperature = 0.7
-}) {
-  const genericGuard = `
-한국어로 답하세요. 질문을 되묻는 안내 멘트만 하지 말고, 먼저 핵심 답을 3–6문장으로 제시하세요.
-금지 문구: "무엇을 도와드릴까요", "어떤 도움이 필요하신가요", "어떤 점이 궁금하신가요" 등.`.trim();
-
-  const ragGuide = vsId ? `
-업로드된 파일이 도움이 될 때만 file_search를 사용하세요. 질문이 파일과 무관하면 일반 지식으로도 충분히 답하세요.`.trim() : "";
-
-  const mergedSystem = [systemPrompt || "", genericGuard, ragGuide].filter(Boolean).join("\n\n");
-  const input = buildInputString({ systemPrompt: mergedSystem, fewShots, userMessage });
-
-  const tools = vsId ? [{ type: "file_search", vector_store_ids: [vsId] }] : undefined;
-
-  const reasoning = isReasoningModelId(model);
-
-  const body = {
-    model,
-    input,
-    ...(tools ? { tools } : {})
-  };
-
-  // ✅ 비추론 모델일 때만 temperature 사용
-  if (!reasoning) {
-    body.temperature = temperature;
-  }
-
-  const resp = await openaiFetch("/responses", {
-    method: "POST",
-    body
-  });
-  return extractAssistantText(resp) || "[빈 응답]";
-}
-function extractAssistantText(resp) {
-  if (resp?.output_text && resp.output_text.trim()) return resp.output_text.trim();
-  let parts = [];
-  if (Array.isArray(resp?.output)) {
-    for (const o of resp.output) {
-      const content = o?.content || [];
-      for (const c of content) {
-        if (c?.type === "output_text" && c?.text?.value) parts.push(String(c.text.value));
-        else if (typeof c?.text === "string") parts.push(c.text);
-      }
-      if (!parts.length && Array.isArray(o?.suggested_replies) && o.suggested_replies.length) {
-        const t = o.suggested_replies[0]?.text;
-        if (t) parts.push(t);
-      }
-    }
-  }
-  return parts.join("\n").trim();
 }
 
 // ---------- Markdown & Math helpers ----------
@@ -246,11 +149,13 @@ function sanitizeHTML(html) {
     return html;
   }
 }
+
 function renderMarkdown(mdText) {
   const raw = String(mdText || "");
   const html = (window.marked ? window.marked.parse(raw) : raw);
   return sanitizeHTML(html);
 }
+
 function enhanceLinks(container) {
   container.querySelectorAll("a[href]").forEach(a => {
     a.setAttribute("target", "_blank");
@@ -327,6 +232,7 @@ async function saveChatbotToFirestore(payload) {
     return ref.id;
   }
 }
+
 async function loadChatbotFromFirestore(id) {
   const snap = await getDoc(doc(db, "chatbots", id));
   if (!snap.exists()) throw new Error("해당 챗봇 문서가 없습니다.");
@@ -343,6 +249,7 @@ async function fetchFileAsBlob(url){const r=await fetch(url);if(!r.ok)throw new 
 // dedupe helpers
 const fileKey = (m)=> String(m?.path || m?.url || m?.name || "").toLowerCase();
 const nameKey = (f)=> String(f?.name || "").toLowerCase();
+
 function dedupeMetas(metas){
   const seen = new Set();
   const out = [];
@@ -390,13 +297,13 @@ function renderFileLists() {
     wrap.appendChild(row);
   });
 
-  // 🔧 저장본과 "파일명 기준"으로 중복되는 선택본은 숨김
+  // 저장본과 "파일명 기준"으로 중복되는 선택본은 숨김
   const savedNames = new Set((savedRagFiles || []).map(m => String(m?.name || "").toLowerCase()));
 
   // 미저장(방금 선택한) 파일들
   clearSelectedFileObjectUrls();
   (selectedFiles || []).forEach((f, idx) => {
-    if (savedNames.has(nameKey(f))) return; // ← 중복 숨김
+    if (savedNames.has(nameKey(f))) return;
     const row = document.createElement("div");
     row.style.display = "flex";
     row.style.gap = "8px";
@@ -454,7 +361,13 @@ async function deleteSavedFileAt(idx) {
     }
 
     renderFileLists();
-    setRagStatus(null, selectedFiles.length ? `선택된 파일 ${selectedFiles.length}개 (테스트하기로 준비)` : "RAG 준비 전");
+    invalidatePreparedRag({
+      disableSend: true,
+      statusState: selectedFiles.length || savedRagFiles.length ? "busy" : null,
+      statusText: selectedFiles.length || savedRagFiles.length
+        ? `파일 구성이 변경되었습니다. 다시 ‘테스트하기’를 눌러 준비하세요.`
+        : "RAG 준비 전"
+    });
     showToast("🗑️ 파일을 삭제했습니다.");
   } catch (err) {
     console.error(err);
@@ -471,7 +384,13 @@ function removeSelectedFileAt(idx) {
   selectedFiles = Array.from(dt.files);
 
   renderFileLists();
-  setRagStatus(null, selectedFiles.length ? `선택된 파일 ${selectedFiles.length}개 (테스트하기로 준비)` : "RAG 준비 전");
+  invalidatePreparedRag({
+    disableSend: true,
+    statusState: selectedFiles.length || savedRagFiles.length ? "busy" : null,
+    statusText: selectedFiles.length || savedRagFiles.length
+      ? `파일 구성이 변경되었습니다. 다시 ‘테스트하기’를 눌러 준비하세요.`
+      : "RAG 준비 전"
+  });
 }
 
 // 편집모드 채우기 (+ 저장된 PDF들을 가능한 한 File로 복구)
@@ -535,21 +454,14 @@ async function populateFormFromDoc(data) {
 
   renderFileLists();
 
-  // 테스트 편의용: 가능한 파일은 File로 복구
+  // 편집 모드에서는 저장된 파일 메타만 유지하고, 실제 테스트 시 서버가 URL로 파일을 읽습니다.
   selectedFiles = [];
-  for (const f of savedRagFiles) {
-    if (!f.url) continue;
-    try {
-      const blob = await fetchFileAsBlob(f.url);
-      const file = new File([blob], f.name, { type: blob.type || "application/pdf" });
-      selectedFiles.push(file);
-    } catch (e) {
-      console.warn("저장된 파일 로드 실패:", f.name, e?.message);
-    }
-  }
   if (savedRagFiles.length) {
-    setRagStatus("busy", `선택된 파일 ${selectedFiles.length || savedRagFiles.length}개 (테스트하기로 준비)`);
-    document.getElementById("sendMessage").disabled = true;
+    invalidatePreparedRag({
+      disableSend: true,
+      statusState: "busy",
+      statusText: `저장된 파일 ${savedRagFiles.length}개 (테스트하기로 준비)`
+    });
   }
 }
 
@@ -608,10 +520,9 @@ function resetAllUI() {
 
   clearSelectedFileObjectUrls();
   selectedFiles = [];
-  uploadedByFingerprint.clear();
-  attachedFileIds.clear();
   vectorStoreId = null;
   isRagReady = false;
+  lastPreparedSourceKey = "";
   savedRagFiles = [];
 }
 
@@ -629,6 +540,7 @@ async function hydrateFromFirestoreIfNeeded() {
 
 // Storage 업로드(저장용)
 function safeName(name) { return String(name).replace(/[^\w.\-가-힣 ]+/g, "_"); }
+
 async function uploadRagFilesToStorage(files) {
   const uid = currentUser?.uid || "anon";
   const ts = Date.now();
@@ -636,6 +548,21 @@ async function uploadRagFilesToStorage(files) {
   for (let i = 0; i < files.length; i++) {
     const f = files[i];
     const path = `chatbots/${uid}/rag/${ts}_${i}_${safeName(f.name)}`;
+    const ref = storageRef(storage, path);
+    await uploadBytes(ref, f);
+    const url = await getDownloadURL(ref);
+    metas.push({ name: f.name, path, url });
+  }
+  return metas;
+}
+
+async function uploadPreviewFilesToStorage(files) {
+  const uid = currentUser?.uid || "anon";
+  const ts = Date.now();
+  const metas = [];
+  for (let i = 0; i < files.length; i++) {
+    const f = files[i];
+    const path = `chatbots/${uid}/rag-preview/${ts}_${i}_${safeName(f.name)}`;
     const ref = storageRef(storage, path);
     await uploadBytes(ref, f);
     const url = await getDownloadURL(ref);
@@ -666,7 +593,6 @@ window.addEventListener("DOMContentLoaded", async () => {
 
   const ragToggle = document.getElementById("ragToggle");
   const ragUpload = document.getElementById("ragUpload");
-  const ragStatusEl = document.getElementById("ragStatus");
 
   const modelSelect = document.getElementById("modelSelect");
   const customModelId = document.getElementById("customModelId");
@@ -681,15 +607,18 @@ window.addEventListener("DOMContentLoaded", async () => {
   ragToggle.addEventListener("change", () => {
     if (ragToggle.checked) {
       ragUpload.classList.remove("hidden");
-      setRagStatus("busy", "RAG 사용: 파일 선택 후 ‘테스트하기’로 준비");
-      sendBtn.disabled = true;
+      invalidatePreparedRag({
+        disableSend: true,
+        statusState: "busy",
+        statusText: "RAG 사용: 파일 선택 후 ‘테스트하기’로 준비"
+      });
     } else {
       ragUpload.classList.add("hidden");
-      selectedFiles = [];
-      clearSelectedFileObjectUrls();
-      isRagReady = attachedFileIds.size > 0;
-      ragStatusEl.classList.remove("ready", "busy", "error");
-      ragStatusEl.querySelector(".text").textContent = "RAG 꺼짐";
+      invalidatePreparedRag({
+        disableSend: false,
+        statusState: null,
+        statusText: "RAG 꺼짐"
+      });
       sendBtn.disabled = false;
     }
     renderFileLists();
@@ -699,12 +628,14 @@ window.addEventListener("DOMContentLoaded", async () => {
   const ragFile = document.getElementById("ragFile");
   ragFile.addEventListener("change", (e) => {
     selectedFiles = Array.from(e.target.files || []);
-    if (selectedFiles.length) isRagReady = false;
-    if (ragToggle.checked) {
-      setRagStatus("busy", `선택된 파일 ${selectedFiles.length}개 (테스트하기로 준비)`);
-      sendBtn.disabled = true;
-    }
-    renderFileLists(); // 미저장 파일도 즉시 링크/삭제 노출(중복은 숨김)
+    invalidatePreparedRag({
+      disableSend: true,
+      statusState: ragToggle.checked ? "busy" : null,
+      statusText: ragToggle.checked
+        ? `선택된 파일 ${selectedFiles.length}개 (테스트하기로 준비)`
+        : "RAG 준비 전"
+    });
+    renderFileLists();
   });
 
   // few-shot 토글/추가
@@ -713,6 +644,7 @@ window.addEventListener("DOMContentLoaded", async () => {
   fewShotToggle.addEventListener("change", () => {
     fewShotContainer.classList.toggle("hidden", !fewShotToggle.checked);
   });
+
   document.getElementById("addExample").addEventListener("click", () => {
     const block = document.createElement("div");
     block.className = "example-block";
@@ -751,7 +683,7 @@ window.addEventListener("DOMContentLoaded", async () => {
 
       const id = await saveChatbotToFirestore(payload);
 
-      // ✅ 저장 후 선택본/파일 입력/Blob URL 초기화 → 중복 렌더링 방지
+      // 저장 후 선택본/파일 입력/Blob URL 초기화
       clearSelectedFileObjectUrls();
       selectedFiles = [];
       const fileInput = document.getElementById("ragFile");
@@ -775,65 +707,67 @@ window.addEventListener("DOMContentLoaded", async () => {
       const ragOn = document.getElementById("ragToggle").checked;
       const sendBtnLocal = document.getElementById("sendMessage");
 
+      if (!currentUser) {
+        throw new Error("로그인 후 이용해주세요.");
+      }
+
       if (!ragOn) {
         appendMessage("bot", "<div class='prose'>ℹ️ <strong>RAG</strong>가 꺼져 있어 인덱싱이 필요 없습니다. 바로 질문을 보내세요.</div>");
         return;
       }
-      if (!selectedFiles.length && attachedFileIds.size > 0) {
-        isRagReady = true;
-        setRagStatus("ready", `RAG 준비 완료 (파일 ${attachedFileIds.size}개)`);
-        sendBtnLocal.disabled = false;
-        appendMessage("bot", "<div class='prose'>✅ 이미 업로드·인덱싱된 파일이 있어 바로 사용할 수 있습니다.</div>");
-        return;
-      }
-      if (!selectedFiles.length) {
+
+      const currentSourceKey = buildCurrentRagSourceKey();
+      if (!currentSourceKey) {
         setRagStatus("error", "PDF를 먼저 선택하세요.");
         appendMessage("bot", "<div class='prose'>⚠️ PDF를 먼저 선택해주세요.</div>");
         return;
       }
 
-      setRagStatus("busy", "Vector Store 생성 중…");
-      const vsId = await ensureVectorStore();
-
-      for (const file of selectedFiles) {
-        const fp = makeFingerprint(file);
-        if (uploadedByFingerprint.has(fp)) {
-          const fileId = uploadedByFingerprint.get(fp);
-          if (attachedFileIds.has(fileId)) {
-            appendMessage("bot", `<div class='prose'>♻️ 이미 준비된 파일: <code>${escapeHtml(file.name)}</code> (업로드/인덱싱 생략)</div>`);
-            continue;
-          }
-          appendMessage("bot", `<div class='prose'>🔗 재연결: <code>${escapeHtml(file.name)}</code></div>`);
-          await attachToVS(vsId, fileId);
-          await waitIndexed(vsId, fileId);
-          attachedFileIds.add(fileId);
-          appendMessage("bot", `<div class='prose'>✅ 인덱싱 완료: <code>${escapeHtml(file.name)}</code></div>`);
-          continue;
-        }
-        appendMessage("bot", `<div class='prose'>📚 업로드: <code>${escapeHtml(file.name)}</code></div>`);
-        const up = await uploadFileToOpenAI(file);
-        uploadedByFingerprint.set(fp, up.id);
-        await attachToVS(vsId, up.id);
-        await waitIndexed(vsId, up.id);
-        attachedFileIds.add(up.id);
-        appendMessage("bot", `<div class='prose'>✅ 인덱싱 완료: <code>${escapeHtml(file.name)}</code></div>`);
+      if (isRagReady && vectorStoreId && lastPreparedSourceKey === currentSourceKey) {
+        setRagStatus("ready", "RAG 준비 완료");
+        sendBtnLocal.disabled = false;
+        appendMessage("bot", "<div class='prose'>✅ 이미 준비가 완료된 문서 세트입니다. 바로 질문을 보내세요.</div>");
+        return;
       }
 
-      isRagReady = attachedFileIds.size > 0;
-      if (isRagReady) {
-        setRagStatus("ready", `RAG 준비 완료 (파일 ${attachedFileIds.size}개)`);
-        document.getElementById("sendMessage").disabled = false;
-        appendMessage("bot", "<div class='prose'>🎉 준비 완료! 질문을 보내면 업로드한 문서로 답합니다.</div>");
-      } else {
-        setRagStatus("error", "파일 준비 실패");
+      setRagStatus("busy", "RAG 준비 중…");
+      sendBtnLocal.disabled = true;
+
+      let previewMetas = [];
+      if (selectedFiles.length) {
+        appendMessage("bot", `<div class='prose'>📦 선택한 PDF ${selectedFiles.length}개를 임시 업로드하는 중입니다...</div>`);
+        previewMetas = await uploadPreviewFilesToStorage(selectedFiles);
       }
+
+      const combined = dedupeMetas([...(savedRagFiles || []), ...previewMetas]);
+      if (!combined.length) {
+        throw new Error("RAG에 사용할 파일이 없습니다.");
+      }
+
+      appendMessage("bot", `<div class='prose'>📚 문서 ${combined.length}개를 준비 중입니다...</div>`);
+      const result = await prepareRagPreviewCall({
+        files: combined.map((m) => ({ url: m.url, name: m.name }))
+      });
+      const data = result?.data || {};
+
+      if (!data?.vectorStoreId) {
+        throw new Error("vectorStoreId를 받지 못했습니다.");
+      }
+
+      vectorStoreId = data.vectorStoreId;
+      isRagReady = true;
+      lastPreparedSourceKey = currentSourceKey;
+
+      setRagStatus("ready", `RAG 준비 완료 (파일 ${data.uploadedCount || combined.length}개)`);
+      sendBtnLocal.disabled = false;
+      appendMessage("bot", "<div class='prose'>🎉 준비 완료! 이제 질문을 보내면 업로드한 문서를 바탕으로 답합니다.</div>");
     } catch (err) {
-      isRagReady = false;
-      setRagStatus("error", "오류 발생");
-      appendMessage("bot", `<div class='prose'>❌ RAG 준비 실패: ${escapeHtml(err.message)}</div>`);
-      if (document.getElementById("ragToggle").checked) {
-        document.getElementById("sendMessage").disabled = true;
-      }
+      invalidatePreparedRag({
+        disableSend: true,
+        statusState: "error",
+        statusText: "오류 발생"
+      });
+      appendMessage("bot", `<div class='prose'>❌ RAG 준비 실패: ${escapeHtml(getCallableErrorMessage(err))}</div>`);
     }
   });
 
@@ -847,7 +781,7 @@ window.addEventListener("DOMContentLoaded", async () => {
   });
 });
 
-// 메시지 전송/출력/폼 수집 — 기존 문법 유지
+// 메시지 전송/출력/폼 수집
 async function onSendMessage(inputEl) {
   const msg = inputEl.value.trim();
   if (!msg) return;
@@ -876,24 +810,29 @@ async function onSendMessage(inputEl) {
   const thinking = appendMessage("bot", "<div class='prose'>💬 <em>답변 생성 중...</em></div>");
 
   try {
-    const text = await askWithFileSearch({
+    if (!currentUser) {
+      throw new Error("로그인 후 이용해주세요.");
+    }
+
+    const result = await previewChatCall({
       model: modelId,
       systemPrompt,
       fewShots,
       userMessage: msg,
-      vsId: (useRag && isRagReady) ? vectorStoreId : null,
+      vectorStoreId: (useRag && isRagReady) ? vectorStoreId : null,
       selfConsistency,
-      samples: 3,
       temperature: 0.7
     });
 
+    const text = result?.data?.text || "[빈 응답]";
     const html = `<div class="prose">${renderMarkdown(text)}</div>`;
     thinking.innerHTML = "";
     animateTypingWithMath(thinking, html);
   } catch (err) {
-    thinking.innerHTML = `<div class='prose'>❌ 응답 실패: ${escapeHtml(err.message)}</div>`;
+    thinking.innerHTML = `<div class='prose'>❌ 응답 실패: ${escapeHtml(getCallableErrorMessage(err))}</div>`;
   }
 }
+
 function appendMessage(role, content = "") {
   const msg = document.createElement("div");
   msg.className = `chat-message ${role}`;
@@ -903,9 +842,6 @@ function appendMessage(role, content = "") {
   chatWindow.scrollTop = chatWindow.scrollHeight;
   return msg;
 }
-
-// (이전 방식 교체) — 안전 노드 단위 애니메이션을 사용하므로 구현을 여기서 유지
-// function animateTypingWithMath(element, html, delay = 18) { ... }  ← 대체됨
 
 function collectFormData() {
   const subject = document.getElementById("subject").value.trim();
@@ -925,6 +861,7 @@ function collectFormData() {
       if (val) examples.push(val);
     });
   }
+
   return {
     subject, name, description,
     useRag, useFewShot, selfConsistency,
@@ -932,6 +869,7 @@ function collectFormData() {
     model, modelSelectValue, customModelValue
   };
 }
+
 function restoreDraftFromStorage() {
   const raw = localStorage.getItem("create_chatbot_draft");
   if (!raw) return;
@@ -986,6 +924,7 @@ function restoreDraftFromStorage() {
     examplesArea.appendChild(block);
   }
 }
+
 function showToast(text, ms = 1400) {
   const toast = document.createElement("div");
   toast.textContent = text;
